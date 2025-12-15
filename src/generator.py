@@ -293,6 +293,13 @@ class UVMGenerator:
         """Generate a Makefile for simulation"""
         sv_files = [f.filename for f in files if f.filename.endswith('.sv')]
         
+        # Build file list for Makefile (avoiding backslash in f-string)
+        newline = '\n'
+        backslash = '\\'
+        file_lines = [f"    {f} {backslash}" for f in sv_files[:-1]]
+        sv_files_section = newline.join(file_lines)
+        last_file = sv_files[-1] if sv_files else ""
+        
         return f'''# VerifAI Generated Makefile
 # Protocol: {spec.protocol.upper()}
 # Module: {spec.module_name}
@@ -301,9 +308,9 @@ class UVMGenerator:
 SIM ?= verilator
 
 # Source files
-SV_FILES = \\
-{chr(10).join(f"    {f} \\\\" for f in sv_files[:-1])}
-    {sv_files[-1] if sv_files else ""}
+SV_FILES = {backslash}
+{sv_files_section}
+    {last_file}
 
 # UVM settings
 UVM_HOME ?= $(shell which vcs > /dev/null && echo "builtin" || echo "$(HOME)/uvm-1.2")
