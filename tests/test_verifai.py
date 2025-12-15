@@ -50,13 +50,49 @@ class SpecParser:
             'data_width': 32,
             'addr_width': 32,
             'registers': [],
-            'features': ['scoreboard', 'coverage']
+            'features': ['scoreboard', 'coverage'],
+            # UART defaults
+            'baud_rate': 115200,
+            'data_bits': 8,
+            'stop_bits': 1,
+            'parity': 'none',
+            'has_rts_cts': False,
+            'has_tx_fifo': True,
+            'has_rx_fifo': True,
+            'fifo_depth': 16,
+            # SPI defaults
+            'spi_mode': 0,
+            'spi_num_slaves': 1,
+            'spi_msb_first': True,
+            'spi_clock_divider': 2,
+            'spi_cs_setup_time': 1,
+            'spi_cs_hold_time': 1,
+            'spi_supports_qspi': False,
+            # I2C defaults
+            'i2c_speed_mode': 'standard',
+            'i2c_address_bits': 7,
+            'i2c_clock_stretching': True,
+            'i2c_multi_master': False,
+            # APB defaults
+            'apb_version': 3,
+            # AXI defaults
+            'axi_id_width': 4,
+            'axi_outstanding': 4,
         }
         
         spec_lower = spec.lower()
         
-        # Detect protocol
-        if 'axi4-lite' in spec_lower or 'axi4lite' in spec_lower or 'axi4 lite' in spec_lower:
+        # Detect protocol (order matters - check specific protocols first)
+        if 'spi' in spec_lower or 'serial peripheral' in spec_lower:
+            config['protocol'] = 'spi'
+            config['data_width'] = 8
+        elif 'uart' in spec_lower or 'rs232' in spec_lower or ('serial' in spec_lower and 'peripheral' not in spec_lower):
+            config['protocol'] = 'uart'
+            config['data_width'] = 8
+        elif 'i2c' in spec_lower or 'iic' in spec_lower or 'two wire' in spec_lower:
+            config['protocol'] = 'i2c'
+            config['data_width'] = 8
+        elif 'axi4-lite' in spec_lower or 'axi4lite' in spec_lower or 'axi4 lite' in spec_lower:
             config['protocol'] = 'axi4lite'
         elif 'axi' in spec_lower:
             config['protocol'] = 'axi4lite'
@@ -112,11 +148,11 @@ class UVMGenerator:
         protocol = config.get('protocol', 'apb')
         generated_files = []
         
-        # Template mapping
+        # Template mapping for all protocols
         templates = {
             'apb': [
                 ('apb_pkg.sv.j2', 'apb_pkg.sv'),
-                ('apb_interface.sv.j2', 'apb_interface.sv'),
+                ('apb_interface.sv.j2', 'apb_if.sv'),
                 ('apb_seq_item.sv.j2', 'apb_seq_item.sv'),
                 ('apb_driver.sv.j2', 'apb_driver.sv'),
                 ('apb_monitor.sv.j2', 'apb_monitor.sv'),
@@ -131,7 +167,7 @@ class UVMGenerator:
             ],
             'axi4lite': [
                 ('axi4lite_pkg.sv.j2', 'axi4lite_pkg.sv'),
-                ('axi4lite_interface.sv.j2', 'axi4lite_interface.sv'),
+                ('axi4lite_interface.sv.j2', 'axi4lite_if.sv'),
                 ('axi4lite_seq_item.sv.j2', 'axi4lite_seq_item.sv'),
                 ('axi4lite_driver.sv.j2', 'axi4lite_driver.sv'),
                 ('axi4lite_monitor.sv.j2', 'axi4lite_monitor.sv'),
@@ -143,7 +179,52 @@ class UVMGenerator:
                 ('axi4lite_env.sv.j2', 'axi4lite_env.sv'),
                 ('axi4lite_base_test.sv.j2', 'axi4lite_base_test.sv'),
                 ('axi4lite_top_tb.sv.j2', 'axi4lite_top_tb.sv'),
-            ]
+            ],
+            'uart': [
+                ('uart_pkg.sv.j2', 'uart_pkg.sv'),
+                ('uart_interface.sv.j2', 'uart_if.sv'),
+                ('uart_seq_item.sv.j2', 'uart_seq_item.sv'),
+                ('uart_driver.sv.j2', 'uart_driver.sv'),
+                ('uart_monitor.sv.j2', 'uart_monitor.sv'),
+                ('uart_sequencer.sv.j2', 'uart_sequencer.sv'),
+                ('uart_agent.sv.j2', 'uart_agent.sv'),
+                ('uart_sequence_lib.sv.j2', 'uart_sequence_lib.sv'),
+                ('uart_scoreboard.sv.j2', 'uart_scoreboard.sv'),
+                ('uart_coverage.sv.j2', 'uart_coverage.sv'),
+                ('uart_env.sv.j2', 'uart_env.sv'),
+                ('uart_base_test.sv.j2', 'uart_base_test.sv'),
+                ('uart_top_tb.sv.j2', 'uart_top_tb.sv'),
+            ],
+            'spi': [
+                ('spi_pkg.sv.j2', 'spi_pkg.sv'),
+                ('spi_interface.sv.j2', 'spi_if.sv'),
+                ('spi_seq_item.sv.j2', 'spi_seq_item.sv'),
+                ('spi_driver.sv.j2', 'spi_driver.sv'),
+                ('spi_monitor.sv.j2', 'spi_monitor.sv'),
+                ('spi_sequencer.sv.j2', 'spi_sequencer.sv'),
+                ('spi_agent.sv.j2', 'spi_agent.sv'),
+                ('spi_sequence_lib.sv.j2', 'spi_sequence_lib.sv'),
+                ('spi_scoreboard.sv.j2', 'spi_scoreboard.sv'),
+                ('spi_coverage.sv.j2', 'spi_coverage.sv'),
+                ('spi_env.sv.j2', 'spi_env.sv'),
+                ('spi_base_test.sv.j2', 'spi_base_test.sv'),
+                ('spi_top_tb.sv.j2', 'spi_top_tb.sv'),
+            ],
+            'i2c': [
+                ('i2c_pkg.sv.j2', 'i2c_pkg.sv'),
+                ('i2c_interface.sv.j2', 'i2c_if.sv'),
+                ('i2c_seq_item.sv.j2', 'i2c_seq_item.sv'),
+                ('i2c_driver.sv.j2', 'i2c_driver.sv'),
+                ('i2c_monitor.sv.j2', 'i2c_monitor.sv'),
+                ('i2c_sequencer.sv.j2', 'i2c_sequencer.sv'),
+                ('i2c_agent.sv.j2', 'i2c_agent.sv'),
+                ('i2c_sequence_lib.sv.j2', 'i2c_sequence_lib.sv'),
+                ('i2c_scoreboard.sv.j2', 'i2c_scoreboard.sv'),
+                ('i2c_coverage.sv.j2', 'i2c_coverage.sv'),
+                ('i2c_env.sv.j2', 'i2c_env.sv'),
+                ('i2c_base_test.sv.j2', 'i2c_base_test.sv'),
+                ('i2c_top_tb.sv.j2', 'i2c_top_tb.sv'),
+            ],
         }
         
         template_list = templates.get(protocol, templates['apb'])
@@ -332,10 +413,10 @@ class TestUVMGenerator:
         files = generator.generate(sample_axi_config, temp_output_dir)
         
         assert len(files) > 0
-        # Check essential files exist
+        # Check essential files exist (note: interface uses _if.sv naming)
         expected_files = [
             'axi4lite_pkg.sv',
-            'axi4lite_interface.sv',
+            'axi4lite_if.sv',
             'axi4lite_driver.sv',
             'axi4lite_monitor.sv',
             'axi4lite_agent.sv'
@@ -491,6 +572,209 @@ class TestIntegration:
         # Verify
         assert len(files) >= 10
         assert config.get('protocol') == 'axi4lite'
+
+
+class TestUARTProtocol:
+    """Tests for UART protocol support."""
+    
+    def test_uart_protocol_detection(self):
+        """Test UART protocol is detected from spec."""
+        parser = SpecParser(llm_client=None)
+        for spec in ["UART controller", "uart testbench", "serial interface", "RS232 module"]:
+            result = parser.quick_parse(spec)
+            assert result.get('protocol') == 'uart', f"Failed for: {spec}"
+    
+    @pytest.fixture
+    def temp_output_dir(self):
+        temp_dir = tempfile.mkdtemp()
+        yield temp_dir
+        shutil.rmtree(temp_dir)
+    
+    def test_uart_generation(self, temp_output_dir):
+        """Test UART testbench generation."""
+        parser = SpecParser(llm_client=None)
+        spec = "UART controller testbench with 115200 baud rate"
+        config = parser.quick_parse(spec)
+        
+        template_dir = Path(__file__).parent.parent / 'templates'
+        generator = UVMGenerator(str(template_dir))
+        files = generator.generate(config, temp_output_dir)
+        
+        assert len(files) >= 10
+        assert config.get('protocol') == 'uart'
+        
+        # Check UART-specific files exist
+        output_path = Path(temp_output_dir)
+        assert (output_path / 'uart_driver.sv').exists()
+        assert (output_path / 'uart_monitor.sv').exists()
+    
+    def test_uart_driver_content(self, temp_output_dir):
+        """Test UART driver has correct content."""
+        parser = SpecParser(llm_client=None)
+        config = parser.quick_parse("UART testbench")
+        
+        template_dir = Path(__file__).parent.parent / 'templates'
+        generator = UVMGenerator(str(template_dir))
+        generator.generate(config, temp_output_dir)
+        
+        driver_file = Path(temp_output_dir) / 'uart_driver.sv'
+        content = driver_file.read_text()
+        
+        assert 'uvm_driver' in content
+        assert 'uart' in content.lower()
+
+
+class TestSPIProtocol:
+    """Tests for SPI protocol support."""
+    
+    def test_spi_protocol_detection(self):
+        """Test SPI protocol is detected from spec."""
+        parser = SpecParser(llm_client=None)
+        for spec in ["SPI master", "spi controller", "Serial Peripheral Interface"]:
+            result = parser.quick_parse(spec)
+            assert result.get('protocol') == 'spi', f"Failed for: {spec}"
+    
+    @pytest.fixture
+    def temp_output_dir(self):
+        temp_dir = tempfile.mkdtemp()
+        yield temp_dir
+        shutil.rmtree(temp_dir)
+    
+    def test_spi_generation(self, temp_output_dir):
+        """Test SPI testbench generation."""
+        parser = SpecParser(llm_client=None)
+        spec = "SPI master controller Mode 0"
+        config = parser.quick_parse(spec)
+        
+        template_dir = Path(__file__).parent.parent / 'templates'
+        generator = UVMGenerator(str(template_dir))
+        files = generator.generate(config, temp_output_dir)
+        
+        assert len(files) >= 10
+        assert config.get('protocol') == 'spi'
+        
+        # Check SPI-specific files exist
+        output_path = Path(temp_output_dir)
+        assert (output_path / 'spi_driver.sv').exists()
+        assert (output_path / 'spi_coverage.sv').exists()
+    
+    def test_spi_interface_signals(self, temp_output_dir):
+        """Test SPI interface has correct signals."""
+        parser = SpecParser(llm_client=None)
+        config = parser.quick_parse("SPI master testbench")
+        
+        template_dir = Path(__file__).parent.parent / 'templates'
+        generator = UVMGenerator(str(template_dir))
+        generator.generate(config, temp_output_dir)
+        
+        if_file = Path(temp_output_dir) / 'spi_if.sv'
+        content = if_file.read_text()
+        
+        # Check for SPI signals
+        assert 'sclk' in content.lower() or 'sck' in content.lower()
+        assert 'mosi' in content.lower() or 'sdo' in content.lower()
+        assert 'miso' in content.lower() or 'sdi' in content.lower()
+
+
+class TestI2CProtocol:
+    """Tests for I2C protocol support."""
+    
+    def test_i2c_protocol_detection(self):
+        """Test I2C protocol is detected from spec."""
+        parser = SpecParser(llm_client=None)
+        for spec in ["I2C master", "i2c controller", "IIC interface", "two wire interface"]:
+            result = parser.quick_parse(spec)
+            assert result.get('protocol') == 'i2c', f"Failed for: {spec}"
+    
+    @pytest.fixture
+    def temp_output_dir(self):
+        temp_dir = tempfile.mkdtemp()
+        yield temp_dir
+        shutil.rmtree(temp_dir)
+    
+    def test_i2c_generation(self, temp_output_dir):
+        """Test I2C testbench generation."""
+        parser = SpecParser(llm_client=None)
+        spec = "I2C master controller standard mode"
+        config = parser.quick_parse(spec)
+        
+        template_dir = Path(__file__).parent.parent / 'templates'
+        generator = UVMGenerator(str(template_dir))
+        files = generator.generate(config, temp_output_dir)
+        
+        assert len(files) >= 10
+        assert config.get('protocol') == 'i2c'
+        
+        # Check I2C-specific files exist
+        output_path = Path(temp_output_dir)
+        assert (output_path / 'i2c_driver.sv').exists()
+        assert (output_path / 'i2c_scoreboard.sv').exists()
+    
+    def test_i2c_interface_signals(self, temp_output_dir):
+        """Test I2C interface has correct signals."""
+        parser = SpecParser(llm_client=None)
+        config = parser.quick_parse("I2C master testbench")
+        
+        template_dir = Path(__file__).parent.parent / 'templates'
+        generator = UVMGenerator(str(template_dir))
+        generator.generate(config, temp_output_dir)
+        
+        if_file = Path(temp_output_dir) / 'i2c_if.sv'
+        content = if_file.read_text()
+        
+        # Check for I2C signals
+        assert 'scl' in content.lower()
+        assert 'sda' in content.lower()
+    
+    def test_i2c_coverage(self, temp_output_dir):
+        """Test I2C coverage model is generated."""
+        parser = SpecParser(llm_client=None)
+        config = parser.quick_parse("I2C testbench")
+        
+        template_dir = Path(__file__).parent.parent / 'templates'
+        generator = UVMGenerator(str(template_dir))
+        generator.generate(config, temp_output_dir)
+        
+        cov_file = Path(temp_output_dir) / 'i2c_coverage.sv'
+        content = cov_file.read_text()
+        
+        assert 'covergroup' in content
+        assert 'coverpoint' in content
+
+
+class TestAllProtocolsGeneration:
+    """Test generation for all supported protocols."""
+    
+    @pytest.fixture
+    def temp_output_dir(self):
+        temp_dir = tempfile.mkdtemp()
+        yield temp_dir
+        shutil.rmtree(temp_dir)
+    
+    @pytest.mark.parametrize("protocol,spec", [
+        ("apb", "APB slave testbench"),
+        ("axi4lite", "AXI4-Lite memory controller"),
+        ("uart", "UART 115200 8N1 testbench"),
+        ("spi", "SPI master Mode 0 testbench"),
+        ("i2c", "I2C master standard mode testbench"),
+    ])
+    def test_protocol_generation(self, temp_output_dir, protocol, spec):
+        """Test generation works for all protocols."""
+        parser = SpecParser(llm_client=None)
+        config = parser.quick_parse(spec)
+        
+        template_dir = Path(__file__).parent.parent / 'templates'
+        generator = UVMGenerator(str(template_dir))
+        files = generator.generate(config, temp_output_dir)
+        
+        assert config.get('protocol') == protocol
+        assert len(files) >= 10
+        
+        # Verify essential files exist
+        output_path = Path(temp_output_dir)
+        assert (output_path / f'{protocol}_driver.sv').exists()
+        assert (output_path / f'{protocol}_monitor.sv').exists()
+        assert (output_path / f'{protocol}_agent.sv').exists()
 
 
 if __name__ == '__main__':
