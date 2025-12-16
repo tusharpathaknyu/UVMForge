@@ -581,6 +581,123 @@ class TestVerificationChecklist:
         assert any("zero" in t.lower() for t in result.checklist.data_path_tests)
 
 
+class TestWaveformGenerator:
+    """Test waveform diagram generation"""
+    
+    @pytest.fixture
+    def sample_apb_rtl(self):
+        return '''
+        module apb_slave (
+            input  logic        pclk,
+            input  logic        preset_n,
+            input  logic        psel,
+            input  logic        penable,
+            output logic        pready
+        );
+        endmodule
+        '''
+    
+    def test_waveforms_generated(self, sample_apb_rtl):
+        """Test that waveforms are generated"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        assert hasattr(result, 'waveforms')
+        assert result.waveforms is not None
+        assert len(result.waveforms) > 0
+    
+    def test_waveform_has_ascii_art(self, sample_apb_rtl):
+        """Test that waveforms contain ASCII art"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        for wf in result.waveforms:
+            assert wf.ascii_art is not None
+            assert len(wf.ascii_art) > 50  # Should be substantial
+    
+    def test_apb_waveforms_for_apb_design(self, sample_apb_rtl):
+        """Test APB design gets APB waveforms"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        # Should have APB waveform
+        waveform_names = [wf.name for wf in result.waveforms]
+        assert any('apb' in name.lower() for name in waveform_names)
+    
+    def test_waveform_generator_standalone(self):
+        """Test WaveformGenerator directly"""
+        from src.rtl_parser import WaveformGenerator
+        
+        # Test APB
+        apb_wfs = WaveformGenerator.generate_for_protocol('apb')
+        assert len(apb_wfs) > 0
+        assert any('write' in wf.name.lower() for wf in apb_wfs)
+        
+        # Test AXI
+        axi_wfs = WaveformGenerator.generate_for_protocol('axi4lite')
+        assert len(axi_wfs) > 0
+        
+        # Test generic
+        generic_wfs = WaveformGenerator.generate_for_protocol('unknown')
+        assert len(generic_wfs) > 0
+
+
+class TestConstraintGenerator:
+    """Test constraint randomization hint generation"""
+    
+    @pytest.fixture
+    def sample_apb_rtl(self):
+        return '''
+        module apb_slave (
+            input  logic        pclk,
+            input  logic        preset_n,
+            input  logic        psel,
+            input  logic        penable,
+            input  logic        pwrite,
+            input  logic [31:0] paddr,
+            input  logic [31:0] pwdata,
+            output logic [31:0] prdata,
+            output logic        pready
+        );
+        endmodule
+        '''
+    
+    def test_constraints_generated(self, sample_apb_rtl):
+        """Test that constraints are generated"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        assert hasattr(result, 'constraints')
+        assert result.constraints is not None
+        assert len(result.constraints) > 0
+    
+    def test_constraint_has_code(self, sample_apb_rtl):
+        """Test constraints have code"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        for constraint in result.constraints:
+            assert constraint.constraint_code is not None
+            assert len(constraint.constraint_code) > 10
+    
+    def test_data_constraint_generated(self, sample_apb_rtl):
+        """Test data distribution constraint is generated"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        constraint_names = [c.signal_name for c in result.constraints]
+        assert 'data' in constraint_names
+    
+    def test_apb_specific_constraints(self, sample_apb_rtl):
+        """Test APB-specific constraints are generated"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        # Should have APB transaction constraints
+        constraint_names = [c.signal_name for c in result.constraints]
+        assert 'apb_txn' in constraint_names
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
 

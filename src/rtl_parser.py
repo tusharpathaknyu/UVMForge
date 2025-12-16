@@ -510,6 +510,422 @@ class VerificationChecklist:
     corner_cases: List[str]
 
 
+@dataclass
+class ConstraintHint:
+    """Constraint randomization hints for UVM sequences"""
+    signal_name: str
+    constraint_type: str  # "range", "enum", "distribution", "solve_order"
+    constraint_code: str
+    description: str
+
+
+@dataclass
+class WaveformDiagram:
+    """ASCII waveform diagram for protocol visualization"""
+    name: str
+    description: str
+    ascii_art: str
+    signals: List[str]
+    num_cycles: int
+
+
+class WaveformGenerator:
+    """Generates ASCII waveform diagrams for protocols"""
+    
+    PROTOCOL_WAVEFORMS = {
+        'apb': {
+            'write': '''
+┌─────────────────────────────────────────────────────────────────┐
+│  APB Write Transaction                                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  PCLK     ──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──               │
+│            └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──               │
+│                                                                 │
+│  PSEL     ─────┐                          ┌─────                │
+│                └──────────────────────────┘                     │
+│                                                                 │
+│  PENABLE  ───────────┐              ┌─────                      │
+│                      └──────────────┘                           │
+│                                                                 │
+│  PWRITE   ─────┐                          ┌─────                │
+│                └──────────────────────────┘                     │
+│                                                                 │
+│  PADDR    ═════╪══════════════════════════╪═════                │
+│                │         ADDR             │                     │
+│                                                                 │
+│  PWDATA   ═════╪══════════════════════════╪═════                │
+│                │         DATA             │                     │
+│                                                                 │
+│  PREADY   ─────────────────────┐    ┌─────                      │
+│                                └────┘                           │
+│                                                                 │
+│            │IDLE│    SETUP    │  ACCESS   │IDLE│                │
+└─────────────────────────────────────────────────────────────────┘''',
+            'read': '''
+┌─────────────────────────────────────────────────────────────────┐
+│  APB Read Transaction                                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  PCLK     ──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──               │
+│            └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──               │
+│                                                                 │
+│  PSEL     ─────┐                          ┌─────                │
+│                └──────────────────────────┘                     │
+│                                                                 │
+│  PENABLE  ───────────┐              ┌─────                      │
+│                      └──────────────┘                           │
+│                                                                 │
+│  PWRITE   ───────────────────────────────────────               │
+│                   (LOW for read)                                │
+│                                                                 │
+│  PADDR    ═════╪══════════════════════════╪═════                │
+│                │         ADDR             │                     │
+│                                                                 │
+│  PRDATA   ═════════════════════╪══════════╪═════                │
+│                                │   DATA   │                     │
+│                                                                 │
+│  PREADY   ─────────────────────┐    ┌─────                      │
+│                                └────┘                           │
+│                                                                 │
+│            │IDLE│    SETUP    │  ACCESS   │IDLE│                │
+└─────────────────────────────────────────────────────────────────┘'''
+        },
+        'axi4lite': {
+            'write': '''
+┌─────────────────────────────────────────────────────────────────┐
+│  AXI4-Lite Write Transaction                                    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ACLK     ──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──         │
+│            └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──         │
+│                                                                 │
+│  AWVALID  ─────┐        ┌───────────────────────────            │
+│                └────────┘                                       │
+│                                                                 │
+│  AWREADY  ───────────┐  ┌───────────────────────────            │
+│                      └──┘                                       │
+│                                                                 │
+│  AWADDR   ═════╪════════╪═══════════════════════════            │
+│                │  ADDR  │                                       │
+│                                                                 │
+│  WVALID   ───────────┐        ┌─────────────────────            │
+│                      └────────┘                                 │
+│                                                                 │
+│  WREADY   ─────────────────┐  ┌─────────────────────            │
+│                            └──┘                                 │
+│                                                                 │
+│  WDATA    ═══════════╪════════╪═════════════════════            │
+│                      │  DATA  │                                 │
+│                                                                 │
+│  BVALID   ─────────────────────────┐        ┌───────            │
+│                                    └────────┘                   │
+│                                                                 │
+│  BREADY   ─────────────────────────────┐    ┌───────            │
+│                                        └────┘                   │
+│                                                                 │
+│            │ AW  │  W   │    B    │                             │
+│            │PHASE│PHASE │  PHASE  │                             │
+└─────────────────────────────────────────────────────────────────┘''',
+            'read': '''
+┌─────────────────────────────────────────────────────────────────┐
+│  AXI4-Lite Read Transaction                                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ACLK     ──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──         │
+│            └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──         │
+│                                                                 │
+│  ARVALID  ─────┐        ┌───────────────────────────            │
+│                └────────┘                                       │
+│                                                                 │
+│  ARREADY  ───────────┐  ┌───────────────────────────            │
+│                      └──┘                                       │
+│                                                                 │
+│  ARADDR   ═════╪════════╪═══════════════════════════            │
+│                │  ADDR  │                                       │
+│                                                                 │
+│  RVALID   ─────────────────────┐        ┌───────────            │
+│                                └────────┘                       │
+│                                                                 │
+│  RREADY   ─────────────────────────┐    ┌───────────            │
+│                                    └────┘                       │
+│                                                                 │
+│  RDATA    ═════════════════════╪════════╪═══════════            │
+│                                │  DATA  │                       │
+│                                                                 │
+│            │  AR PHASE  │    R PHASE    │                       │
+└─────────────────────────────────────────────────────────────────┘'''
+        },
+        'spi': {
+            'transfer': '''
+┌─────────────────────────────────────────────────────────────────┐
+│  SPI Transfer (Mode 0: CPOL=0, CPHA=0)                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  CS_N     ────┐                                        ┌────    │
+│               └────────────────────────────────────────┘        │
+│                                                                 │
+│  SCLK     ────────┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──   │
+│                   └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘      │
+│                                                                 │
+│  MOSI     ════╪═══╪════╪════╪════╪════╪════╪════╪════╪════     │
+│               │D7 │D6  │D5  │D4  │D3  │D2  │D1  │D0  │          │
+│                                                                 │
+│  MISO     ════╪═══╪════╪════╪════╪════╪════╪════╪════╪════     │
+│               │D7 │D6  │D5  │D4  │D3  │D2  │D1  │D0  │          │
+│                                                                 │
+│           │ CS │      8-bit transfer (MSB first)      │ CS │    │
+│           │ LOW│                                      │HIGH│    │
+└─────────────────────────────────────────────────────────────────┘'''
+        },
+        'uart': {
+            'transfer': '''
+┌─────────────────────────────────────────────────────────────────┐
+│  UART Frame (8N1: 8 data bits, No parity, 1 stop bit)           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  TX/RX    ────┐     ┌───┬───┬───┬───┬───┬───┬───┬───┐   ┌────  │
+│               │     │   │   │   │   │   │   │   │   │   │       │
+│               └─────┴───┴───┴───┴───┴───┴───┴───┴───┴───┘       │
+│               │START│ D0│ D1│ D2│ D3│ D4│ D5│ D6│ D7│STOP│      │
+│               │ BIT │        DATA BITS (LSB first)   │ BIT│      │
+│                                                                 │
+│  Timing:  │<─────────── Bit Period = 1/Baud ────────────>│      │
+│                                                                 │
+│  Common baud rates: 9600, 19200, 38400, 57600, 115200           │
+└─────────────────────────────────────────────────────────────────┘'''
+        },
+        'i2c': {
+            'transfer': '''
+┌─────────────────────────────────────────────────────────────────┐
+│  I2C Write Transaction                                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  SCL     ────┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐     ┌──┐  ┌──┐  ┌────   │
+│              └──┘  └──┘  └──┘  └──┘  └──...─┘  └──┘  └──┘       │
+│                                                                 │
+│  SDA     ──┐  ╔══════════════════════╗ ╔═══╗ ╔═════════╗  ┌──  │
+│            └──╢  7-bit Address + W   ╟─╢ACK╟─╢  Data   ╟──┘     │
+│               ╚══════════════════════╝ ╚═══╝ ╚═════════╝        │
+│          │S │                          │ A │             │ P│   │
+│          │T │     ADDRESS PHASE        │ C │ DATA PHASE  │ │   │
+│          │A │                          │ K │             │S│   │
+│          │R │                          │   │             │T│   │
+│          │T │                          │   │             │O│   │
+│                                                          │P│   │
+│  START: SDA ↓ while SCL HIGH                                   │
+│  STOP:  SDA ↑ while SCL HIGH                                   │
+└─────────────────────────────────────────────────────────────────┘'''
+        },
+        'generic': {
+            'handshake': '''
+┌─────────────────────────────────────────────────────────────────┐
+│  Generic Handshake Protocol                                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  CLK      ──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──               │
+│            └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──               │
+│                                                                 │
+│  VALID    ─────┐              ┌─────────────────                │
+│                └──────────────┘                                 │
+│                                                                 │
+│  READY    ───────────┐        ┌─────────────────                │
+│                      └────────┘                                 │
+│                                                                 │
+│  DATA     ═════╪══════════════╪═════════════════                │
+│                │    DATA      │                                 │
+│                                                                 │
+│           │    │   Transfer   │                                 │
+│           │IDLE│   completes  │IDLE                             │
+│           │    │   when both  │                                 │
+│           │    │   HIGH       │                                 │
+└─────────────────────────────────────────────────────────────────┘'''
+        }
+    }
+    
+    @classmethod
+    def generate_for_protocol(cls, protocol: str) -> List[WaveformDiagram]:
+        """Generate waveform diagrams for a detected protocol"""
+        diagrams = []
+        protocol_key = protocol.lower().replace('-', '').replace('_', '').replace('4lite', '4lite')
+        
+        # Normalize protocol names
+        if 'apb' in protocol_key:
+            protocol_key = 'apb'
+        elif 'axi' in protocol_key:
+            protocol_key = 'axi4lite'
+        elif 'spi' in protocol_key:
+            protocol_key = 'spi'
+        elif 'uart' in protocol_key:
+            protocol_key = 'uart'
+        elif 'i2c' in protocol_key:
+            protocol_key = 'i2c'
+        else:
+            protocol_key = 'generic'
+        
+        waveforms = cls.PROTOCOL_WAVEFORMS.get(protocol_key, cls.PROTOCOL_WAVEFORMS['generic'])
+        
+        for name, ascii_art in waveforms.items():
+            diagrams.append(WaveformDiagram(
+                name=f"{protocol}_{name}",
+                description=f"{protocol.upper()} {name.replace('_', ' ').title()} timing diagram",
+                ascii_art=ascii_art,
+                signals=cls._extract_signals(ascii_art),
+                num_cycles=8
+            ))
+        
+        return diagrams
+    
+    @staticmethod
+    def _extract_signals(ascii_art: str) -> List[str]:
+        """Extract signal names from waveform diagram"""
+        import re
+        signals = []
+        for line in ascii_art.split('\n'):
+            match = re.match(r'│\s+(\w+)\s+', line)
+            if match:
+                signals.append(match.group(1))
+        return list(set(signals))
+
+
+class ConstraintGenerator:
+    """Generates constraint randomization hints based on protocol and FSM"""
+    
+    @staticmethod
+    def generate_constraints(parsed: 'ParsedRTL') -> List[ConstraintHint]:
+        """Generate constraint hints based on RTL analysis"""
+        hints = []
+        protocol = parsed.protocol_hints[0].protocol if parsed.protocol_hints else "generic"
+        
+        # Data width constraints
+        data_w = parsed.get_data_width()
+        addr_w = parsed.get_addr_width()
+        
+        hints.append(ConstraintHint(
+            signal_name="data",
+            constraint_type="distribution",
+            constraint_code=f"""constraint data_dist {{
+    data dist {{
+        0                      := 5,   // All zeros
+        {(1 << data_w) - 1}    := 5,   // All ones  
+        [1:{(1 << data_w) - 2}] := 90  // Random values
+    }};
+}}""",
+            description=f"Distribution constraint for {data_w}-bit data"
+        ))
+        
+        hints.append(ConstraintHint(
+            signal_name="addr",
+            constraint_type="range",
+            constraint_code=f"""constraint addr_range {{
+    addr inside {{[0:{(1 << addr_w) - 1}]}};
+    addr[1:0] == 2'b00;  // Word-aligned
+}}""",
+            description=f"Address range and alignment constraint ({addr_w}-bit)"
+        ))
+        
+        # Protocol-specific constraints
+        if protocol == "apb":
+            hints.append(ConstraintHint(
+                signal_name="apb_txn",
+                constraint_type="distribution",
+                constraint_code="""constraint apb_txn_type {{
+    pwrite dist {{ 1 := 50, 0 := 50 }};  // 50% writes, 50% reads
+}}
+
+constraint apb_back2back {{
+    b2b_delay inside {[0:3]};  // Allow back-to-back with 0-3 cycle gap
+}}""",
+                description="APB transaction type and timing constraints"
+            ))
+        elif protocol == "axi4lite":
+            hints.append(ConstraintHint(
+                signal_name="axi_txn",
+                constraint_type="distribution",
+                constraint_code="""constraint axi_txn_type {{
+    is_write dist {{ 1 := 50, 0 := 50 }};
+}}
+
+constraint axi_resp {{
+    // Expect OKAY response most of the time
+    expected_resp dist {{ 2'b00 := 95, 2'b10 := 5 }};
+}}
+
+constraint axi_strobe {{
+    // Usually full word writes
+    wstrb dist {{ 4'hF := 80, [4'h1:4'hE] := 20 }};
+}}""",
+                description="AXI4-Lite transaction and response constraints"
+            ))
+        elif protocol == "spi":
+            hints.append(ConstraintHint(
+                signal_name="spi_txn",
+                constraint_type="range",
+                constraint_code="""constraint spi_mode {{
+    cpol inside {[0:1]};
+    cpha inside {[0:1]};
+}}
+
+constraint spi_transfer {{
+    tx_bytes inside {[1:16]};  // 1-16 byte transfers
+}}""",
+                description="SPI mode and transfer size constraints"
+            ))
+        elif protocol == "uart":
+            hints.append(ConstraintHint(
+                signal_name="uart_txn",
+                constraint_type="enum",
+                constraint_code="""constraint uart_baud {{
+    baud_rate inside {{ 9600, 19200, 38400, 57600, 115200 }};
+}}
+
+constraint uart_frame {{
+    data_bits inside {{ 7, 8 }};
+    stop_bits inside {{ 1, 2 }};
+    parity inside {{ NONE, EVEN, ODD }};
+}}""",
+                description="UART baud rate and frame format constraints"
+            ))
+        elif protocol == "i2c":
+            hints.append(ConstraintHint(
+                signal_name="i2c_txn",
+                constraint_type="distribution",
+                constraint_code="""constraint i2c_addr {{
+    slave_addr inside {[7'h08:7'h77]};  // Valid 7-bit addresses
+}}
+
+constraint i2c_op {{
+    is_read dist {{ 1 := 40, 0 := 60 }};  // Slightly more writes
+}}
+
+constraint i2c_len {{
+    num_bytes inside {[1:32]};
+}}""",
+                description="I2C address and operation constraints"
+            ))
+        
+        # FSM-based constraints
+        if parsed.fsm and parsed.fsm.states:
+            states = parsed.fsm.states
+            states_list = ", ".join(states[:8])  # First 8 states
+            hints.append(ConstraintHint(
+                signal_name="fsm_state",
+                constraint_type="enum",
+                constraint_code=f"""constraint state_coverage {{
+    // Ensure all states are exercised
+    target_state inside {{ {states_list} }};
+}}
+
+constraint state_transitions {{
+    // Weight interesting transitions higher
+    soft prev_state != curr_state;  // Prefer state changes
+}}""",
+                description=f"FSM state coverage constraints ({len(states)} states)"
+            ))
+        
+        return hints
+
+
 class SimpleParsedRTL:
     """Simple wrapper for app.py compatibility"""
     def __init__(self, parsed: ParsedRTL):
@@ -529,6 +945,17 @@ class SimpleParsedRTL:
         # Add new computed properties
         self.complexity = self._compute_complexity(parsed)
         self.checklist = self._generate_checklist(parsed)
+        self.waveforms = self._generate_waveforms(parsed)
+        self.constraints = self._generate_constraints(parsed)
+    
+    def _generate_waveforms(self, parsed: ParsedRTL) -> List[WaveformDiagram]:
+        """Generate protocol waveform diagrams"""
+        protocol = parsed.protocol_hints[0].protocol if parsed.protocol_hints else "generic"
+        return WaveformGenerator.generate_for_protocol(protocol)
+    
+    def _generate_constraints(self, parsed: ParsedRTL) -> List[ConstraintHint]:
+        """Generate constraint randomization hints"""
+        return ConstraintGenerator.generate_constraints(parsed)
     
     def _compute_complexity(self, parsed: ParsedRTL) -> DesignComplexity:
         """Compute design complexity metrics"""

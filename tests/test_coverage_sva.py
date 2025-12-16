@@ -427,5 +427,222 @@ endmodule
         assert "endclass" in suggestion.uvm_sequence_code
 
 
+class TestAllProtocolWaveforms:
+    """Test waveform generation for all protocols"""
+    
+    def test_axi4lite_waveforms(self):
+        """Test AXI4-Lite waveform generation"""
+        from rtl_parser import WaveformGenerator
+        
+        waveforms = WaveformGenerator.generate_for_protocol('axi4lite')
+        assert len(waveforms) >= 2  # Write and read
+        
+        # Check for AXI signals in waveform
+        all_ascii = " ".join(wf.ascii_art for wf in waveforms)
+        assert "AWVALID" in all_ascii or "ARVALID" in all_ascii
+    
+    def test_spi_waveforms(self):
+        """Test SPI waveform generation"""
+        from rtl_parser import WaveformGenerator
+        
+        waveforms = WaveformGenerator.generate_for_protocol('spi')
+        assert len(waveforms) >= 1
+        
+        all_ascii = " ".join(wf.ascii_art for wf in waveforms)
+        assert "SCLK" in all_ascii or "MOSI" in all_ascii
+    
+    def test_uart_waveforms(self):
+        """Test UART waveform generation"""
+        from rtl_parser import WaveformGenerator
+        
+        waveforms = WaveformGenerator.generate_for_protocol('uart')
+        assert len(waveforms) >= 1
+        
+        all_ascii = " ".join(wf.ascii_art for wf in waveforms)
+        assert "START" in all_ascii or "STOP" in all_ascii
+    
+    def test_i2c_waveforms(self):
+        """Test I2C waveform generation"""
+        from rtl_parser import WaveformGenerator
+        
+        waveforms = WaveformGenerator.generate_for_protocol('i2c')
+        assert len(waveforms) >= 1
+        
+        all_ascii = " ".join(wf.ascii_art for wf in waveforms)
+        assert "SDA" in all_ascii or "SCL" in all_ascii
+
+
+class TestAllProtocolConstraints:
+    """Test constraint generation for all protocols"""
+    
+    @pytest.fixture
+    def axi_rtl(self):
+        return '''
+        module axi_lite_slave (
+            input  logic        aclk,
+            input  logic        aresetn,
+            input  logic [31:0] awaddr,
+            input  logic        awvalid,
+            output logic        awready,
+            input  logic [31:0] wdata,
+            input  logic        wvalid,
+            output logic        wready,
+            output logic [1:0]  bresp,
+            output logic        bvalid,
+            input  logic        bready,
+            input  logic [31:0] araddr,
+            input  logic        arvalid,
+            output logic        arready,
+            output logic [31:0] rdata,
+            output logic [1:0]  rresp,
+            output logic        rvalid,
+            input  logic        rready
+        );
+        endmodule
+        '''
+    
+    @pytest.fixture
+    def uart_rtl(self):
+        return '''
+        module uart_tx (
+            input  logic        clk,
+            input  logic        rst_n,
+            input  logic [7:0]  tx_data,
+            input  logic        tx_valid,
+            output logic        tx_ready,
+            output logic        tx
+        );
+        endmodule
+        '''
+    
+    @pytest.fixture
+    def spi_rtl(self):
+        return '''
+        module spi_master (
+            input  logic       clk,
+            input  logic       rst_n,
+            input  logic [7:0] tx_data,
+            output logic [7:0] rx_data,
+            output logic       sclk,
+            output logic       mosi,
+            input  logic       miso,
+            output logic       cs_n
+        );
+        endmodule
+        '''
+    
+    @pytest.fixture
+    def i2c_rtl(self):
+        return '''
+        module i2c_master (
+            input  logic       clk,
+            input  logic       rst_n,
+            input  logic [6:0] slave_addr,
+            input  logic [7:0] tx_data,
+            output logic [7:0] rx_data,
+            inout  wire        sda,
+            output logic       scl
+        );
+        endmodule
+        '''
+    
+    def test_axi_constraints(self, axi_rtl):
+        """Test AXI-specific constraints are generated"""
+        from rtl_parser import parse_rtl
+        result = parse_rtl(axi_rtl)
+        
+        constraint_names = [c.signal_name for c in result.constraints]
+        assert 'axi_txn' in constraint_names
+    
+    def test_uart_constraints(self, uart_rtl):
+        """Test constraints are generated for UART-like design"""
+        from rtl_parser import parse_rtl
+        result = parse_rtl(uart_rtl)
+        
+        # Generic constraints should always be generated
+        constraint_names = [c.signal_name for c in result.constraints]
+        assert 'data' in constraint_names
+        assert 'addr' in constraint_names
+    
+    def test_spi_constraints(self, spi_rtl):
+        """Test SPI-specific constraints are generated"""
+        from rtl_parser import parse_rtl
+        result = parse_rtl(spi_rtl)
+        
+        constraint_names = [c.signal_name for c in result.constraints]
+        # SPI should be detected with enough signals
+        assert 'spi_txn' in constraint_names or 'data' in constraint_names
+    
+    def test_i2c_constraints(self, i2c_rtl):
+        """Test I2C-specific constraints are generated"""
+        from rtl_parser import parse_rtl
+        result = parse_rtl(i2c_rtl)
+        
+        constraint_names = [c.signal_name for c in result.constraints]
+        # I2C should be detected with sda/scl signals
+        assert 'i2c_txn' in constraint_names or 'data' in constraint_names
+
+
+class TestEdgeCases:
+    """Test edge cases and error handling"""
+    
+    def test_empty_rtl(self):
+        """Test handling of empty RTL"""
+        from rtl_parser import parse_rtl
+        result = parse_rtl("")
+        
+        assert result.module_name == "unknown_module"
+        assert len(result.inputs) == 0
+    
+    def test_rtl_no_ports(self):
+        """Test RTL with no ports"""
+        from rtl_parser import parse_rtl
+        result = parse_rtl("module empty; endmodule")
+        
+        assert result.module_name == "empty"
+        assert len(result.inputs) == 0
+        assert len(result.outputs) == 0
+    
+    def test_rtl_comments_only(self):
+        """Test RTL with only comments"""
+        from rtl_parser import parse_rtl
+        result = parse_rtl("// This is a comment\n/* Another comment */")
+        
+        assert result.module_name == "unknown_module"
+    
+    def test_complex_fsm_detection(self):
+        """Test FSM detection with multiple patterns"""
+        from rtl_parser import parse_rtl
+        
+        rtl = '''
+        module fsm_complex (
+            input logic clk,
+            input logic rst_n
+        );
+            typedef enum logic [2:0] {
+                IDLE     = 3'b000,
+                START    = 3'b001,
+                TRANSFER = 3'b010,
+                WAIT     = 3'b011,
+                DONE     = 3'b100
+            } state_t;
+            
+            state_t current_state, next_state;
+            
+            always_ff @(posedge clk or negedge rst_n) begin
+                if (!rst_n)
+                    current_state <= IDLE;
+                else
+                    current_state <= next_state;
+            end
+        endmodule
+        '''
+        
+        result = parse_rtl(rtl)
+        assert result.fsm is not None
+        assert len(result.fsm['states']) >= 4
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+

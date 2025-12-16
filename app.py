@@ -334,6 +334,45 @@ st.markdown("""
         font-weight: 500;
     }
     
+    /* Waveform diagram styling */
+    .waveform-container {
+        background: #1e1e1e;
+        color: #00ff00;
+        font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+        font-size: 0.7rem;
+        line-height: 1.2;
+        padding: 1rem;
+        border-radius: 8px;
+        overflow-x: auto;
+        white-space: pre;
+        border: 1px solid #333;
+    }
+    .waveform-title {
+        color: #00ff00;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Constraint code styling */
+    .constraint-box {
+        background: #f6f8fa;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+    .constraint-title {
+        font-weight: 600;
+        color: #24292f;
+        font-size: 0.85rem;
+        margin-bottom: 0.25rem;
+    }
+    .constraint-desc {
+        color: #57606a;
+        font-size: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+    
     /* Mobile responsiveness */
     @media (max-width: 768px) {
         .block-container {
@@ -536,7 +575,7 @@ SAMPLE_AXI = '''module axi_lite_slave #(
 endmodule'''
 
 # Tabs
-tabs = st.tabs(["RTL to Testbench", "Protocol Templates", "Coverage Analysis", "SVA Assertions"])
+tabs = st.tabs(["RTL to Testbench", "Protocol Templates", "Coverage Analysis", "SVA Assertions", "Register Map"])
 
 # Tab 1: RTL to Testbench
 with tabs[0]:
@@ -651,6 +690,20 @@ with tabs[0]:
                     for test in cl.edge_cases[:3]:
                         st.markdown(f"- {test}")
             
+            # Waveform Diagrams - NEW FEATURE
+            if hasattr(parsed, 'waveforms') and parsed.waveforms:
+                with st.expander("Protocol Timing Diagrams", expanded=True):
+                    for wf in parsed.waveforms:
+                        st.markdown(f"**{wf.description}**")
+                        st.markdown(f'<div class="waveform-container">{wf.ascii_art}</div>', unsafe_allow_html=True)
+            
+            # Constraint Hints - NEW FEATURE
+            if hasattr(parsed, 'constraints') and parsed.constraints:
+                with st.expander("Constraint Randomization Hints"):
+                    for hint in parsed.constraints:
+                        st.markdown(f'<div class="constraint-box"><div class="constraint-title">{hint.signal_name}</div><div class="constraint-desc">{hint.description}</div></div>', unsafe_allow_html=True)
+                        st.code(hint.constraint_code, language="systemverilog")
+            
             # Generated code
             if st.session_state.get('tb_result'):
                 st.code(st.session_state['tb_result'], language="systemverilog")
@@ -748,6 +801,14 @@ Use UVM 1.2 methodology. Add comments explaining key sections.
     
     with col2:
         st.markdown('<div class="card-title">Generated Testbench</div>', unsafe_allow_html=True)
+        
+        # Show protocol waveform for selected protocol
+        from src.rtl_parser import WaveformGenerator
+        waveforms = WaveformGenerator.generate_for_protocol(protocol.lower().replace('-', ''))
+        if waveforms:
+            with st.expander("Protocol Timing Diagram", expanded=True):
+                for wf in waveforms[:1]:  # Show first waveform
+                    st.markdown(f'<div class="waveform-container">{wf.ascii_art}</div>', unsafe_allow_html=True)
         
         if st.session_state.get('proto_result'):
             st.code(st.session_state['proto_result'], language="systemverilog")
@@ -950,6 +1011,111 @@ Use immediate and concurrent assertions as appropriate."""
                 <p><strong>SVA assertions will appear here</strong></p>
                 <p style="font-size: 0.85rem; margin-top: 0.5rem;">
                     Generates protocol-aware assertions from RTL or natural language
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+# Tab 5: Register Map
+with tabs[4]:
+    col1, col2 = st.columns([1, 1], gap="medium")
+    
+    with col1:
+        st.markdown('<div class="card-title">Register Specification</div>', unsafe_allow_html=True)
+        
+        st.markdown("Import register specifications from IP-XACT, SystemRDL, CSV, or JSON formats.")
+        
+        spec_format = st.selectbox("Format", ["CSV (Simple)", "JSON", "IP-XACT XML", "SystemRDL"])
+        
+        if spec_format == "CSV (Simple)":
+            sample_spec = """name,address,width,access,reset,description
+CTRL,0x00,32,RW,0x00000000,Control register
+STATUS,0x04,32,RO,0x00000001,Status register
+DATA,0x08,32,RW,0x00000000,Data register
+IRQ_EN,0x0C,32,RW,0x00000000,Interrupt enable
+IRQ_STATUS,0x10,32,RO,0x00000000,Interrupt status"""
+        elif spec_format == "JSON":
+            sample_spec = """{
+  "name": "my_peripheral",
+  "registers": [
+    {"name": "CTRL", "address": "0x00", "width": 32, "access": "RW", "reset": "0x0"},
+    {"name": "STATUS", "address": "0x04", "width": 32, "access": "RO", "reset": "0x1"},
+    {"name": "DATA", "address": "0x08", "width": 32, "access": "RW", "reset": "0x0"}
+  ]
+}"""
+        else:
+            sample_spec = "<!-- Paste your IP-XACT or SystemRDL here -->"
+        
+        reg_spec = st.text_area(
+            "Spec",
+            height=300,
+            value=sample_spec,
+            label_visibility="collapsed"
+        )
+        
+        if st.button("Parse & Generate", type="primary", use_container_width=True, key="gen_reg"):
+            if reg_spec.strip():
+                with st.spinner("Parsing register specification..."):
+                    try:
+                        parsed_spec = SpecParser().parse(reg_spec, f"regs.{spec_format.split()[0].lower()}")
+                        st.session_state['reg_spec'] = parsed_spec
+                        
+                        # Generate register tests
+                        prompt = f"""Generate UVM register model and test sequences for these registers:
+
+Registers: {[(r.name, r.address, r.access.value if hasattr(r.access, 'value') else r.access) for r in parsed_spec.registers[:10]]}
+
+Generate:
+1. uvm_reg class for each register
+2. uvm_reg_block containing all registers
+3. Register access sequences (write/read tests)
+4. Reset value verification sequence
+
+Use UVM RAL (Register Abstraction Layer) methodology."""
+                        result = generate_with_llm(prompt)
+                        st.session_state['reg_result'] = result
+                    except Exception as e:
+                        st.error(f"Error parsing: {str(e)}")
+            else:
+                st.warning("Please provide register specification")
+    
+    with col2:
+        st.markdown('<div class="card-title">Register Map & Tests</div>', unsafe_allow_html=True)
+        
+        if st.session_state.get('reg_spec'):
+            spec = st.session_state['reg_spec']
+            
+            st.success(f"Parsed {len(spec.registers)} registers")
+            
+            # Display register table
+            st.markdown("**Register Map:**")
+            reg_data = []
+            for reg in spec.registers[:10]:
+                access = reg.access.value if hasattr(reg.access, 'value') else str(reg.access)
+                reg_data.append({
+                    "Name": reg.name,
+                    "Address": f"0x{reg.address:04X}" if isinstance(reg.address, int) else reg.address,
+                    "Width": reg.width,
+                    "Access": access,
+                    "Reset": f"0x{reg.reset_value:08X}" if isinstance(reg.reset_value, int) else reg.reset_value
+                })
+            
+            st.dataframe(reg_data, use_container_width=True, hide_index=True)
+            
+            if st.session_state.get('reg_result'):
+                st.markdown("**Generated UVM Register Model:**")
+                st.code(st.session_state['reg_result'], language="systemverilog")
+                st.download_button(
+                    "Download Register Model",
+                    st.session_state['reg_result'],
+                    "reg_model.sv",
+                    use_container_width=True
+                )
+        else:
+            st.markdown("""
+            <div class="placeholder">
+                <p><strong>Register map will appear here</strong></p>
+                <p style="font-size: 0.85rem; margin-top: 0.5rem;">
+                    Import IP-XACT, SystemRDL, CSV, or JSON register specs
                 </p>
             </div>
             """, unsafe_allow_html=True)
