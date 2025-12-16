@@ -1017,7 +1017,7 @@ def render_wavedrom_js_disabled(wavedrom_json: str, height: int = 150, key: str 
 # Navigation with dark mode toggle
 nav_col1, nav_col2, nav_col3 = st.columns([2, 6, 2])
 with nav_col1:
-    st.markdown(f"""<div class="logo">Verif<span>AI</span></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="logo">UVM<span>Forge</span></div>""", unsafe_allow_html=True)
 with nav_col3:
     col_a, col_b = st.columns(2)
     with col_a:
