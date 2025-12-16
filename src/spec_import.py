@@ -736,3 +736,7 @@ CONFIG,0x0C,INT_EN,1,RW,0,Interrupt enable
     
     import json
     print(json.dumps(spec_to_dict(spec), indent=2))
+
+
+# Alias for app.py compatibility
+SpecParser = UnifiedSpecParser
