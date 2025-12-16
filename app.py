@@ -1,1116 +1,623 @@
 """
-VerifAI Web UI
-==============
-Streamlit-based web interface for VerifAI UVM testbench generator.
-
-Features:
-- Natural Language → UVM Testbench
-- RTL Upload → Exact Port-Matched Testbench (NEW!)
-- IP-XACT/SystemRDL/CSV Import → Register Tests (NEW!)
-- Coverage Gap Analysis → Suggests sequences (NEW!)
-- SVA Assertion Generation → Auto-generates assertions (NEW!)
+VerifAI - UVM Testbench Generator
+Generates production-ready UVM testbenches for common protocols
 """
 
 import streamlit as st
 import os
-import sys
-import tempfile
-import zipfile
-import io
-from pathlib import Path
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent / 'src'))
-
-from src.parser import SpecParser, ParsedSpec
-from src.generator import UVMGenerator
-from src.llm_client import get_llm_client, MockLLMClient
-from src.rtl_parser import RTLParser, analyze_rtl
-from src.spec_import import UnifiedSpecParser, spec_to_dict
+import google.generativeai as genai
+from src.templates import PROTOCOL_TEMPLATES
+from src.rtl_parser import parse_rtl
+from src.spec_import import SpecParser
 from src.rtl_aware_gen import RTLAwareGenerator
 from src.coverage_analyzer import CoverageAnalyzer
-from src.sva_generator import SVAGenerator, generate_sva_from_parsed
+from src.sva_generator import SVAGenerator
 
-# Page configuration
+# Configure page
 st.set_page_config(
-    page_title="VerifAI - AI UVM Generator",
-    page_icon="🚀",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="VerifAI - UVM Testbench Generator",
+    page_icon="🔬",
+    layout="wide"
 )
 
-# Custom CSS
+# Custom CSS for cleaner look
 st.markdown("""
 <style>
     .main-header {
-        font-size: 3rem;
-        font-weight: bold;
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #1E3A5F;
         text-align: center;
-        padding: 1rem 0;
+        margin-bottom: 0.5rem;
     }
     .sub-header {
-        text-align: center;
+        font-size: 1.1rem;
         color: #666;
-        font-size: 1.2rem;
+        text-align: center;
         margin-bottom: 2rem;
     }
-    .stTextArea textarea {
-        font-family: 'Monaco', 'Menlo', monospace;
-    }
-    .file-card {
-        background: #f8f9fa;
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-        border-left: 4px solid #667eea;
-    }
-    .success-box {
-        background: #d4edda;
-        border: 1px solid #c3e6cb;
-        border-radius: 8px;
-        padding: 1rem;
-        color: #155724;
+    .feature-box {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.5rem;
+        border-radius: 10px;
+        color: white;
+        margin-bottom: 1rem;
     }
     .protocol-badge {
         display: inline-block;
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-weight: bold;
-        margin: 0.25rem;
+        background: #e8f4f8;
+        padding: 0.3rem 0.8rem;
+        border-radius: 15px;
+        margin: 0.2rem;
+        font-size: 0.85rem;
+        color: #1E3A5F;
     }
-    .protocol-apb { background: #e3f2fd; color: #1565c0; }
-    .protocol-axi { background: #f3e5f5; color: #7b1fa2; }
-    .protocol-uart { background: #fff3e0; color: #ef6c00; }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #f0f2f6;
+        border-radius: 8px;
+        padding: 10px 20px;
+    }
+    .sample-btn {
+        background: #28a745;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 5px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # Header
-st.markdown('<h1 class="main-header">🚀 VerifAI</h1>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">AI-Powered UVM Testbench Generator | RTL-Aware | Spec Import | Coverage Analysis | SVA Generator</p>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-header">🔬 VerifAI</h1>', unsafe_allow_html=True)
+st.markdown('''<p class="sub-header">
+    Generate production-ready UVM testbenches for standard protocols. 
+    Supports APB, AXI4-Lite, UART, SPI, and I2C with RTL-aware generation, 
+    coverage analysis, and SVA assertion generation.
+</p>''', unsafe_allow_html=True)
 
-# Main tabs for different modes
-main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = st.tabs([
-    "📝 Natural Language", 
-    "🔌 RTL-Aware", 
-    "📋 Spec Import",
-    "📊 Coverage Gap",
-    "✅ SVA Generator"
-])
+# Supported protocols display
+st.markdown("**Supported Protocols:**")
+protocols_html = ""
+for proto in ["APB", "AXI4-Lite", "UART", "SPI", "I2C"]:
+    protocols_html += f'<span class="protocol-badge">{proto}</span>'
+st.markdown(protocols_html, unsafe_allow_html=True)
 
-# Sidebar
-with st.sidebar:
-    st.header("⚙️ Configuration")
-    
-    # LLM Selection
-    llm_choice = st.selectbox(
-        "🤖 LLM Provider",
-        ["gemini", "openai", "anthropic", "ollama", "mock"],
-        index=0,
-        help="Select the AI model to parse your specification"
-    )
-    
-    # API Key input (if needed)
-    if llm_choice == "gemini":
-        api_key = st.text_input(
-            "Google API Key",
-            type="password",
-            value=os.getenv("GOOGLE_API_KEY", ""),
-            help="Get your free API key from Google AI Studio"
-        )
-        if api_key:
-            os.environ["GOOGLE_API_KEY"] = api_key
-    elif llm_choice == "openai":
-        api_key = st.text_input(
-            "OpenAI API Key",
-            type="password",
-            value=os.getenv("OPENAI_API_KEY", ""),
-        )
-        if api_key:
-            os.environ["OPENAI_API_KEY"] = api_key
-    
-    st.divider()
-    
-    # Protocol quick select
-    st.header("📦 Protocol Templates")
-    
-    protocol_templates = {
-        "APB Register Block": "Create a UVM testbench for an APB slave with STATUS register at 0x00 (read-only), CONTROL register at 0x04 (read-write), DATA register at 0x08 (read-write), and CONFIG register at 0x0C (read-write)",
-        "AXI4-Lite Memory": "AXI4-Lite memory controller testbench with 1KB address space, 32-bit data width, and read-after-write verification",
-        "UART 8N1": "UART controller testbench with 115200 baud rate, 8 data bits, no parity, 1 stop bit, with error injection support",
-        "UART with Flow Control": "UART testbench with 9600 baud, even parity, RTS/CTS hardware flow control, 16-byte FIFO",
-        "SPI Master Mode 0": "SPI master controller testbench in Mode 0 (CPOL=0, CPHA=0), 8-bit data width, single slave, MSB first",
-        "SPI Multi-Slave": "SPI master with 4 slave devices, Mode 3, 16-bit transfers, with QSPI support",
-        "I2C Master Standard": "I2C master controller testbench in standard mode (100kHz), 7-bit addressing, with clock stretching support",
-        "I2C Fast Mode": "I2C master testbench in fast mode (400kHz), 7-bit addressing, multi-byte transfers to EEPROM at address 0x50",
-    }
-    
-    selected_template = st.selectbox(
-        "Quick Templates",
-        ["Custom..."] + list(protocol_templates.keys())
-    )
-    
-    st.divider()
-    
-    # Info
-    st.header("ℹ️ About")
-    st.markdown("""
-    **VerifAI** transforms natural language 
-    specifications into production-ready 
-    UVM testbenches.
-    
-    **Supported Protocols:**
-    - ✅ APB (APB3/APB4)
-    - ✅ AXI4-Lite
-    - ✅ UART
-    - ✅ SPI
-    - ✅ I2C
-    
-    **Unique Features:**
-    - 🔌 RTL-Aware Generation
-    - 📋 Spec Import
-    - 📊 Coverage Analysis
-    - ✅ SVA Generator
-    
-    [GitHub](https://github.com/tusharpathaknyu/VerifAI)
-    """)
+st.markdown("---")
 
-# =============================================================================
-# TAB 1: Natural Language Mode (Original)
-# =============================================================================
-with main_tab1:
-    # Main content
-    col1, col2 = st.columns([1, 1])
+# Configure Gemini (using environment variable)
+def get_llm():
+    """Get configured Gemini model"""
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if api_key:
+        genai.configure(api_key=api_key)
+        return genai.GenerativeModel('gemini-1.5-flash')
+    return None
 
-with col1:
-    st.header("📝 Specification")
-    
-    # Pre-fill with template if selected
-    default_spec = ""
-    if selected_template != "Custom...":
-        default_spec = protocol_templates.get(selected_template, "")
-    
-    user_spec = st.text_area(
-        "Describe your testbench in natural language:",
-        value=default_spec,
-        height=200,
-        placeholder="Example: Create a UVM testbench for an APB slave with STATUS and CONTROL registers..."
-    )
-    
-    # Generate button
-    generate_btn = st.button("🚀 Generate UVM Testbench", type="primary", use_container_width=True)
+# Helper function to generate with LLM
+def generate_with_llm(prompt: str) -> str:
+    """Generate response using Gemini"""
+    model = get_llm()
+    if not model:
+        return "Error: API key not configured. Please contact administrator."
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"Error generating response: {str(e)}"
 
-with col2:
-    st.header("📊 Parsed Specification")
-    spec_placeholder = st.empty()
-
-# Results section
-if generate_btn and user_spec:
-    with st.spinner("🤖 Parsing specification with AI..."):
-        try:
-            # Get LLM client
-            if llm_choice == "mock":
-                llm_client = MockLLMClient()
-            else:
-                llm_client = get_llm_client(llm_choice)
-            
-            # Parse specification
-            parser = SpecParser(llm_client=llm_client)
-            parsed_spec = parser.parse(user_spec)
-            
-            # Display parsed spec
-            with spec_placeholder.container():
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.metric("Protocol", parsed_spec.protocol.upper())
-                    st.metric("Data Width", f"{parsed_spec.data_width} bits")
-                with col_b:
-                    st.metric("Module", parsed_spec.module_name)
-                    st.metric("Registers", len(parsed_spec.registers))
-                
-                if parsed_spec.registers:
-                    st.subheader("📋 Registers")
-                    reg_data = []
-                    for reg in parsed_spec.registers:
-                        reg_data.append({
-                            "Name": reg.name,
-                            "Address": f"0x{reg.address:02X}",
-                            "Access": reg.access.value
-                        })
-                    st.table(reg_data)
-            
-        except Exception as e:
-            st.error(f"❌ Error parsing specification: {str(e)}")
-            st.stop()
-    
-    with st.spinner("⚙️ Generating UVM files..."):
-        try:
-            # Generate files
-            template_dir = Path(__file__).parent / "templates"
-            generator = UVMGenerator(str(template_dir))
-            
-            # Use temp directory
-            with tempfile.TemporaryDirectory() as temp_dir:
-                generated_files = generator.generate(parsed_spec, temp_dir)
-                
-                st.success(f"✅ Generated {len(generated_files)} files!")
-                
-                # Create tabs for different views
-                tab1, tab2, tab3 = st.tabs(["📁 Files", "👁️ Preview", "⬇️ Download"])
-                
-                with tab1:
-                    # Display generated files
-                    cols = st.columns(3)
-                    for i, gf in enumerate(generated_files):
-                        with cols[i % 3]:
-                            icon = "📦" if "pkg" in gf.filename else \
-                                   "🔌" if "if" in gf.filename else \
-                                   "🤖" if any(x in gf.filename for x in ["driver", "monitor", "agent"]) else \
-                                   "📊" if any(x in gf.filename for x in ["scoreboard", "coverage"]) else \
-                                   "🧪" if "test" in gf.filename else "📄"
-                            st.markdown(f"""
-                            <div class="file-card">
-                                {icon} <strong>{gf.filename}</strong><br>
-                                <small>{gf.category}</small>
-                            </div>
-                            """, unsafe_allow_html=True)
-                
-                with tab2:
-                    # File preview
-                    file_to_preview = st.selectbox(
-                        "Select file to preview:",
-                        [gf.filename for gf in generated_files]
-                    )
-                    
-                    for gf in generated_files:
-                        if gf.filename == file_to_preview:
-                            st.code(gf.content, language="systemverilog")
-                            break
-                
-                with tab3:
-                    # Create ZIP for download
-                    zip_buffer = io.BytesIO()
-                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-                        for gf in generated_files:
-                            zf.writestr(gf.filename, gf.content)
-                    
-                    zip_buffer.seek(0)
-                    
-                    st.download_button(
-                        label="📥 Download All Files (ZIP)",
-                        data=zip_buffer,
-                        file_name=f"{parsed_spec.module_name}_uvm_tb.zip",
-                        mime="application/zip",
-                        use_container_width=True
-                    )
-                    
-                    st.markdown("---")
-                    st.markdown("**Individual Files:**")
-                    
-                    for gf in generated_files:
-                        st.download_button(
-                            label=f"📄 {gf.filename}",
-                            data=gf.content,
-                            file_name=gf.filename,
-                            mime="text/plain",
-                            key=f"dl_{gf.filename}"
-                        )
-                
-        except Exception as e:
-            st.error(f"❌ Error generating files: {str(e)}")
-            import traceback
-            st.code(traceback.format_exc())
-
-# =============================================================================
-# TAB 2: RTL-Aware Mode (NEW!)
-# =============================================================================
-with main_tab2:
-    st.markdown("""
-    ### 🔌 RTL-Aware Testbench Generation
-    
-    **What makes this different from ChatGPT?**
-    - ✅ **Exact port matching** - No typos, correct widths
-    - ✅ **Auto-detects clock/reset** - Correct polarity
-    - ✅ **Protocol detection** - Recognizes APB, AXI, SPI, I2C, UART
-    - ✅ **FSM-aware** - Detects state machines in your design
-    
-    Upload your Verilog/SystemVerilog file and get a testbench that **exactly matches your DUT**.
-    """)
-    
-    rtl_col1, rtl_col2 = st.columns([1, 1])
-    
-    # Sample RTL for demo
-    SAMPLE_APB_RTL = '''module apb_gpio #(
-    parameter DATA_WIDTH = 32,
-    parameter ADDR_WIDTH = 8
-) (
-    // APB Interface
-    input  logic                    pclk,
-    input  logic                    preset_n,
-    input  logic                    psel,
-    input  logic                    penable,
-    input  logic                    pwrite,
-    input  logic [ADDR_WIDTH-1:0]   paddr,
-    input  logic [DATA_WIDTH-1:0]   pwdata,
-    output logic [DATA_WIDTH-1:0]   prdata,
-    output logic                    pready,
-    output logic                    pslverr,
-    
-    // GPIO Interface
-    input  logic [7:0]              gpio_in,
-    output logic [7:0]              gpio_out,
-    output logic [7:0]              gpio_oe
+# Sample RTL code for demonstrations
+SAMPLE_APB_RTL = '''module apb_slave (
+    input  wire        pclk,
+    input  wire        presetn,
+    input  wire        psel,
+    input  wire        penable,
+    input  wire        pwrite,
+    input  wire [31:0] paddr,
+    input  wire [31:0] pwdata,
+    output reg  [31:0] prdata,
+    output reg         pready,
+    output reg         pslverr
 );
-
-    // Register addresses
-    localparam ADDR_DATA    = 8'h00;
-    localparam ADDR_DIR     = 8'h04;
-    localparam ADDR_STATUS  = 8'h08;
-    localparam ADDR_CONTROL = 8'h0C;
-
     // Internal registers
-    logic [7:0] data_reg;
-    logic [7:0] dir_reg;
-    logic [7:0] status_reg;
-    logic [7:0] control_reg;
-
-    // FSM for APB
-    typedef enum logic [1:0] {
-        IDLE   = 2'b00,
-        SETUP  = 2'b01,
-        ACCESS = 2'b10
-    } state_t;
+    reg [31:0] mem [0:255];
     
-    state_t state, next_state;
-
-    assign pready = (state == ACCESS);
-    assign pslverr = 1'b0;
-    assign gpio_out = data_reg;
-    assign gpio_oe = dir_reg;
-
-    always_ff @(posedge pclk or negedge preset_n) begin
-        if (!preset_n) begin
+    // FSM states
+    localparam IDLE   = 2'b00;
+    localparam SETUP  = 2'b01;
+    localparam ACCESS = 2'b10;
+    
+    reg [1:0] state, next_state;
+    
+    always @(posedge pclk or negedge presetn) begin
+        if (!presetn)
             state <= IDLE;
-            data_reg <= 8'h0;
-            dir_reg <= 8'h0;
-            control_reg <= 8'h0;
-        end else begin
+        else
             state <= next_state;
-            status_reg <= gpio_in;
-            
-            if (state == ACCESS && pwrite) begin
-                case (paddr)
-                    ADDR_DATA:    data_reg <= pwdata[7:0];
-                    ADDR_DIR:     dir_reg <= pwdata[7:0];
-                    ADDR_CONTROL: control_reg <= pwdata[7:0];
-                endcase
-            end
+    end
+    
+    always @(*) begin
+        case (state)
+            IDLE:   next_state = psel ? SETUP : IDLE;
+            SETUP:  next_state = ACCESS;
+            ACCESS: next_state = psel ? SETUP : IDLE;
+            default: next_state = IDLE;
+        endcase
+    end
+    
+    always @(posedge pclk or negedge presetn) begin
+        if (!presetn) begin
+            prdata <= 32'b0;
+            pready <= 1'b0;
+            pslverr <= 1'b0;
+        end else if (state == ACCESS) begin
+            pready <= 1'b1;
+            if (pwrite)
+                mem[paddr[9:2]] <= pwdata;
+            else
+                prdata <= mem[paddr[9:2]];
+        end else begin
+            pready <= 1'b0;
         end
     end
+endmodule'''
 
-    always_comb begin
-        next_state = state;
-        prdata = '0;
-        
-        case (state)
-            IDLE:   if (psel) next_state = SETUP;
-            SETUP:  if (penable) next_state = ACCESS;
-            ACCESS: next_state = IDLE;
-        endcase
-        
-        if (state == ACCESS && !pwrite) begin
-            case (paddr)
-                ADDR_DATA:    prdata = {24'b0, data_reg};
-                ADDR_DIR:     prdata = {24'b0, dir_reg};
-                ADDR_STATUS:  prdata = {24'b0, status_reg};
-                ADDR_CONTROL: prdata = {24'b0, control_reg};
-                default:      prdata = 32'hDEAD_BEEF;
+SAMPLE_AXI_RTL = '''module axi_lite_slave (
+    input  wire        aclk,
+    input  wire        aresetn,
+    // Write address channel
+    input  wire        awvalid,
+    output reg         awready,
+    input  wire [31:0] awaddr,
+    // Write data channel
+    input  wire        wvalid,
+    output reg         wready,
+    input  wire [31:0] wdata,
+    input  wire [3:0]  wstrb,
+    // Write response channel
+    output reg         bvalid,
+    input  wire        bready,
+    output reg  [1:0]  bresp,
+    // Read address channel
+    input  wire        arvalid,
+    output reg         arready,
+    input  wire [31:0] araddr,
+    // Read data channel
+    output reg         rvalid,
+    input  wire        rready,
+    output reg  [31:0] rdata,
+    output reg  [1:0]  rresp
+);
+    reg [31:0] registers [0:15];
+    
+    // Write FSM
+    localparam W_IDLE = 2'b00, W_ADDR = 2'b01, W_DATA = 2'b10, W_RESP = 2'b11;
+    reg [1:0] w_state;
+    reg [31:0] w_addr_reg;
+    
+    always @(posedge aclk or negedge aresetn) begin
+        if (!aresetn) begin
+            w_state <= W_IDLE;
+            awready <= 1'b0;
+            wready <= 1'b0;
+            bvalid <= 1'b0;
+        end else begin
+            case (w_state)
+                W_IDLE: begin
+                    awready <= 1'b1;
+                    if (awvalid && awready) begin
+                        w_addr_reg <= awaddr;
+                        awready <= 1'b0;
+                        wready <= 1'b1;
+                        w_state <= W_DATA;
+                    end
+                end
+                W_DATA: begin
+                    if (wvalid && wready) begin
+                        registers[w_addr_reg[5:2]] <= wdata;
+                        wready <= 1'b0;
+                        bvalid <= 1'b1;
+                        bresp <= 2'b00;
+                        w_state <= W_RESP;
+                    end
+                end
+                W_RESP: begin
+                    if (bready && bvalid) begin
+                        bvalid <= 1'b0;
+                        awready <= 1'b1;
+                        w_state <= W_IDLE;
+                    end
+                end
             endcase
         end
     end
-
 endmodule'''
+
+# Main tabs
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "📝 Protocol Generator",
+    "🔍 RTL-Aware Generator", 
+    "📄 Spec Import",
+    "📊 Coverage Gap Analysis",
+    "✅ SVA Generator"
+])
+
+# Tab 1: Protocol Generator
+with tab1:
+    st.subheader("Generate UVM Testbench from Protocol Template")
+    st.write("Select a protocol and customize parameters to generate a complete UVM testbench.")
     
-    with rtl_col1:
-        st.subheader("📤 Upload RTL")
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        protocol = st.selectbox(
+            "Select Protocol",
+            ["APB", "AXI4-Lite", "UART", "SPI", "I2C"]
+        )
         
-        # Add sample RTL button
-        col_upload, col_sample = st.columns([2, 1])
-        with col_upload:
-            rtl_upload = st.file_uploader(
-                "Upload Verilog/SystemVerilog file",
-                type=['v', 'sv', 'vh', 'svh'],
-                help="Upload your DUT source file"
-            )
-        with col_sample:
-            if st.button("📋 Try Sample APB", help="Load sample APB GPIO controller"):
-                st.session_state['sample_rtl'] = SAMPLE_APB_RTL
+        st.write("**Configuration:**")
         
-        st.markdown("**Or paste RTL code:**")
+        if protocol == "APB":
+            addr_width = st.number_input("Address Width", 8, 64, 32)
+            data_width = st.number_input("Data Width", 8, 64, 32)
+            config = {"addr_width": addr_width, "data_width": data_width}
+        elif protocol == "AXI4-Lite":
+            addr_width = st.number_input("Address Width", 8, 64, 32)
+            data_width = st.selectbox("Data Width", [32, 64])
+            config = {"addr_width": addr_width, "data_width": data_width}
+        elif protocol == "UART":
+            baud_rate = st.selectbox("Baud Rate", [9600, 19200, 38400, 57600, 115200])
+            data_bits = st.selectbox("Data Bits", [7, 8])
+            parity = st.selectbox("Parity", ["none", "even", "odd"])
+            config = {"baud_rate": baud_rate, "data_bits": data_bits, "parity": parity}
+        elif protocol == "SPI":
+            cpol = st.selectbox("CPOL", [0, 1])
+            cpha = st.selectbox("CPHA", [0, 1])
+            data_width = st.number_input("Data Width", 8, 32, 8)
+            config = {"cpol": cpol, "cpha": cpha, "data_width": data_width}
+        else:  # I2C
+            speed = st.selectbox("Speed Mode", ["standard", "fast", "fast_plus"])
+            addr_bits = st.selectbox("Address Bits", [7, 10])
+            config = {"speed_mode": speed, "addr_bits": addr_bits}
+        
+        generate_btn = st.button("🚀 Generate Testbench", type="primary", key="gen_protocol")
+    
+    with col2:
+        if generate_btn:
+            with st.spinner("Generating UVM testbench..."):
+                template = PROTOCOL_TEMPLATES.get(protocol.lower().replace("-", "_"), PROTOCOL_TEMPLATES.get("apb"))
+                
+                prompt = f"""Generate a complete UVM testbench for {protocol} protocol with these parameters:
+{config}
+
+Include:
+1. Interface definition
+2. Sequence item (transaction)
+3. Driver
+4. Monitor  
+5. Agent
+6. Scoreboard
+7. Environment
+8. Test with multiple sequences
+9. Coverage collector
+
+Use proper UVM methodology and SystemVerilog best practices.
+Base structure:
+{template}
+"""
+                result = generate_with_llm(prompt)
+                st.code(result, language="systemverilog")
+                st.download_button(
+                    "📥 Download Testbench",
+                    result,
+                    f"{protocol.lower()}_tb.sv",
+                    mime="text/plain"
+                )
+
+# Tab 2: RTL-Aware Generator  
+with tab2:
+    st.subheader("RTL-Aware Testbench Generation")
+    st.write("Paste your RTL code to generate a testbench that matches your specific design signals, FSMs, and structure.")
+    
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        # Sample button
+        if st.button("📋 Try Sample APB RTL", key="sample_apb"):
+            st.session_state['rtl_input'] = SAMPLE_APB_RTL
+        
         rtl_code = st.text_area(
-            "RTL Code",
-            height=300,
-            value=st.session_state.get('sample_rtl', ''),
-            placeholder="""module my_apb_slave #(
-    parameter DATA_WIDTH = 32
-) (
-    input  logic        pclk,
-    input  logic        preset_n,
-    input  logic        psel,
-    input  logic        penable,
-    ...
-);""",
-            label_visibility="collapsed"
+            "Paste RTL Code (Verilog/SystemVerilog)",
+            value=st.session_state.get('rtl_input', ''),
+            height=400,
+            placeholder="module my_design (\n    input clk,\n    input rst_n,\n    ...\n);"
         )
         
-        # Optional register spec
-        st.subheader("📋 Optional: Register Spec")
-        reg_spec_upload = st.file_uploader(
-            "Upload register spec (IP-XACT, SystemRDL, CSV, JSON)",
-            type=['xml', 'rdl', 'csv', 'json'],
-            help="Optional: Import register definitions for register-specific tests"
-        )
-        
-        generate_rtl_btn = st.button("🚀 Generate RTL-Aware Testbench", key="rtl_gen", use_container_width=True)
+        analyze_btn = st.button("🔍 Analyze & Generate", type="primary", key="analyze_rtl")
     
-    with rtl_col2:
-        st.subheader("📊 RTL Analysis")
-        rtl_analysis_placeholder = st.empty()
-    
-    # Process RTL
-    if generate_rtl_btn:
-        rtl_content = ""
-        if rtl_upload:
-            rtl_content = rtl_upload.read().decode('utf-8')
-        elif rtl_code:
-            rtl_content = rtl_code
-        
-        if rtl_content:
-            with st.spinner("🔍 Analyzing RTL..."):
+    with col2:
+        if analyze_btn and rtl_code:
+            with st.spinner("Analyzing RTL..."):
                 try:
-                    # Analyze RTL
-                    analysis = analyze_rtl(rtl_content)
+                    parsed = parse_rtl(rtl_code)
                     
-                    # Display analysis
-                    with rtl_analysis_placeholder.container():
-                        st.success(f"✅ Parsed module: **{analysis['module_name']}**")
+                    st.success("✅ RTL Analysis Complete")
+                    
+                    # Display analysis results
+                    with st.expander("📊 Analysis Results", expanded=True):
+                        st.write(f"**Module:** {parsed.module_name}")
+                        st.write(f"**Inputs:** {len(parsed.inputs)}")
+                        st.write(f"**Outputs:** {len(parsed.outputs)}")
                         
-                        acol1, acol2, acol3 = st.columns(3)
-                        with acol1:
-                            st.metric("Input Ports", len(analysis['ports']['inputs']))
-                        with acol2:
-                            st.metric("Output Ports", len(analysis['ports']['outputs']))
-                        with acol3:
-                            st.metric("Parameters", len(analysis['parameters']))
-                        
-                        # Protocol hints
-                        if analysis['protocol_hints']:
-                            st.subheader("🎯 Detected Protocol")
-                            for hint in analysis['protocol_hints'][:3]:
-                                confidence_pct = int(hint['confidence'] * 100)
-                                st.progress(confidence_pct / 100, text=f"{hint['protocol'].upper()}: {confidence_pct}% - {hint['reason']}")
-                        
-                        # Clock/Reset
-                        st.subheader("⏰ Clock & Reset")
-                        st.write(f"**Clocks:** {', '.join(analysis['clocks']) or 'None detected'}")
-                        st.write(f"**Resets:** {', '.join(analysis['resets']['signals']) or 'None detected'}")
-                        
-                        # FSM
-                        if analysis['fsm']['detected']:
-                            st.subheader("🔄 FSM Detected")
-                            st.write(f"**States:** {', '.join(analysis['fsm']['states'])}")
-                        
-                        # Ports table
-                        st.subheader("📍 Ports")
-                        port_data = []
-                        for port in analysis['ports']['inputs'][:10]:
-                            port_data.append({"Direction": "input", "Name": port['name'], "Width": port['width']})
-                        for port in analysis['ports']['outputs'][:10]:
-                            port_data.append({"Direction": "output", "Name": port['name'], "Width": port['width']})
-                        st.dataframe(port_data, use_container_width=True)
+                        if parsed.clocks:
+                            st.write(f"**Clocks:** {', '.join(parsed.clocks)}")
+                        if parsed.resets:
+                            st.write(f"**Resets:** {', '.join(parsed.resets)}")
+                        if parsed.fsm:
+                            st.write(f"**FSM Detected:** {parsed.fsm.get('states', 'N/A')}")
                     
                     # Generate testbench
-                    with st.spinner("⚙️ Generating RTL-aware testbench..."):
-                        generator = RTLAwareGenerator()
-                        
-                        # Optional register spec
-                        reg_spec_content = None
-                        reg_spec_filename = None
-                        if reg_spec_upload:
-                            reg_spec_content = reg_spec_upload.read().decode('utf-8')
-                            reg_spec_filename = reg_spec_upload.name
-                        
-                        files = generator.generate_from_rtl(rtl_content, reg_spec_content, reg_spec_filename)
-                        
-                        st.success(f"✅ Generated {len(files)} RTL-aware files!")
-                        
-                        # Preview and download
-                        rtl_tab1, rtl_tab2 = st.tabs(["👁️ Preview", "⬇️ Download"])
-                        
-                        with rtl_tab1:
-                            file_to_preview = st.selectbox(
-                                "Select file:",
-                                list(files.keys()),
-                                key="rtl_preview"
-                            )
-                            st.code(files[file_to_preview], language="systemverilog")
-                        
-                        with rtl_tab2:
-                            zip_buffer = io.BytesIO()
-                            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-                                for fname, content in files.items():
-                                    zf.writestr(fname, content)
-                            zip_buffer.seek(0)
-                            
-                            st.download_button(
-                                label="📥 Download All Files (ZIP)",
-                                data=zip_buffer,
-                                file_name=f"{analysis['module_name']}_rtl_aware_tb.zip",
-                                mime="application/zip",
-                                use_container_width=True,
-                                key="rtl_download"
-                            )
+                    generator = RTLAwareGenerator()
+                    prompt = generator.generate_prompt(parsed)
+                    result = generate_with_llm(prompt)
                     
+                    st.subheader("Generated Testbench")
+                    st.code(result, language="systemverilog")
+                    st.download_button(
+                        "📥 Download",
+                        result,
+                        f"{parsed.module_name}_tb.sv",
+                        mime="text/plain"
+                    )
                 except Exception as e:
-                    st.error(f"❌ Error: {str(e)}")
-                    import traceback
-                    st.code(traceback.format_exc())
-        else:
-            st.warning("Please upload or paste RTL code")
+                    st.error(f"Error parsing RTL: {str(e)}")
+        elif analyze_btn:
+            st.warning("Please paste RTL code first")
 
-# =============================================================================
-# TAB 3: Spec Import Mode (NEW!)
-# =============================================================================
-with main_tab3:
-    st.markdown("""
-    ### 📋 Specification Import
+# Tab 3: Spec Import
+with tab3:
+    st.subheader("Import from Specification")
+    st.write("Parse protocol specifications or documentation to extract verification requirements.")
     
-    **Import industry-standard register specifications:**
-    - 🔷 **IP-XACT** (IEEE 1685) - Industry standard
-    - 🔷 **SystemRDL** - Popular in semiconductor companies
-    - 🔷 **CSV** - Simple spreadsheet format
-    - 🔷 **JSON** - Flexible custom format
+    col1, col2 = st.columns([1, 1])
     
-    VerifAI generates:
-    - Register access sequences for each register
-    - Field-level coverage
-    - Reset value verification
-    - Access type checking (RO, RW, W1C, etc.)
-    """)
-    
-    spec_col1, spec_col2 = st.columns([1, 1])
-    
-    with spec_col1:
-        st.subheader("📤 Upload Specification")
-        
+    with col1:
         spec_format = st.selectbox(
             "Specification Format",
-            ["Auto-Detect", "IP-XACT (XML)", "SystemRDL", "CSV", "JSON"]
+            ["Plain Text", "Markdown", "JSON"]
         )
         
-        spec_upload = st.file_uploader(
-            "Upload specification file",
-            type=['xml', 'rdl', 'csv', 'json'],
-            help="Upload your register specification"
+        spec_text = st.text_area(
+            "Paste Specification",
+            height=350,
+            placeholder="""Example:
+## APB Protocol Requirements
+- All transactions must complete within 16 clock cycles
+- PREADY must be asserted within 4 cycles of PENABLE
+- PSLVERR indicates error condition
+- Address must be aligned to data width"""
         )
         
-        st.markdown("**Or use sample CSV:**")
-        sample_csv = """Register Name,Address,Field Name,Bit Range,Access,Reset Value,Description
-STATUS,0x00,BUSY,0,RO,0,Device busy flag
-STATUS,0x00,ERROR,1,RO,0,Error flag  
-STATUS,0x00,DONE,2,RO,0,Operation complete
-CONTROL,0x04,START,0,RW,0,Start operation
-CONTROL,0x04,RESET,1,W1C,0,Reset device
-CONTROL,0x04,MODE,7:4,RW,0,Operation mode
-DATA,0x08,VALUE,31:0,RW,0,Data register
-CONFIG,0x0C,ENABLE,0,RW,0,Enable device
-CONFIG,0x0C,INT_EN,1,RW,0,Interrupt enable"""
-        
-        if st.button("📋 Use Sample CSV"):
-            st.session_state['sample_spec'] = sample_csv
-        
-        spec_content = st.text_area(
-            "Or paste specification:",
-            value=st.session_state.get('sample_spec', ''),
-            height=200,
-            placeholder="Paste IP-XACT XML, SystemRDL, CSV, or JSON here..."
-        )
-        
-        parse_spec_btn = st.button("📊 Parse Specification", key="parse_spec", use_container_width=True)
+        parse_btn = st.button("📄 Parse Specification", type="primary", key="parse_spec")
     
-    with spec_col2:
-        st.subheader("📊 Parsed Registers")
-        spec_analysis_placeholder = st.empty()
-    
-    # Process specification
-    if parse_spec_btn:
-        content = ""
-        filename = ""
-        
-        if spec_upload:
-            content = spec_upload.read().decode('utf-8')
-            filename = spec_upload.name
-        elif spec_content:
-            content = spec_content
-            filename = "input.csv" if ',' in content else "input.json"
-        
-        if content:
-            with st.spinner("📊 Parsing specification..."):
+    with col2:
+        if parse_btn and spec_text:
+            with st.spinner("Parsing specification..."):
                 try:
-                    parser = UnifiedSpecParser()
-                    parsed = parser.parse(content, filename)
-                    spec_dict = spec_to_dict(parsed)
+                    parser = SpecParser()
+                    requirements = parser.parse(spec_text)
                     
-                    with spec_analysis_placeholder.container():
-                        st.success(f"✅ Parsed: **{parsed.name}** ({parsed.source_format})")
-                        
-                        scol1, scol2, scol3 = st.columns(3)
-                        with scol1:
-                            st.metric("Total Registers", parsed.total_registers)
-                        with scol2:
-                            st.metric("Data Width", f"{parsed.data_width} bits")
-                        with scol3:
-                            st.metric("Register Blocks", len(parsed.register_blocks))
-                        
-                        # Register table
-                        st.subheader("📋 Registers")
-                        for block in parsed.register_blocks:
-                            st.markdown(f"**Block: {block.name}** (Base: 0x{block.base_address:X})")
-                            reg_data = []
-                            for reg in block.registers:
-                                reg_data.append({
-                                    "Name": reg.name,
-                                    "Address": reg.address_hex,
-                                    "Width": reg.width,
-                                    "Access": reg.access.value,
-                                    "Fields": len(reg.fields)
-                                })
-                            st.dataframe(reg_data, use_container_width=True)
-                            
-                            # Field details (expandable)
-                            with st.expander("📍 Field Details"):
-                                for reg in block.registers:
-                                    if reg.fields:
-                                        st.markdown(f"**{reg.name}:**")
-                                        field_data = []
-                                        for f in reg.fields:
-                                            field_data.append({
-                                                "Field": f.name,
-                                                "Bits": f"{f.msb}:{f.lsb}" if f.bit_width > 1 else str(f.bit_offset),
-                                                "Access": f.access.value,
-                                                "Reset": f"0x{f.reset_value:X}"
-                                            })
-                                        st.dataframe(field_data, use_container_width=True)
+                    st.success(f"✅ Extracted {len(requirements)} requirements")
                     
-                    st.divider()
+                    for i, req in enumerate(requirements, 1):
+                        with st.expander(f"Requirement {i}: {req.get('title', 'Untitled')}", expanded=i<=3):
+                            st.write(f"**Type:** {req.get('type', 'functional')}")
+                            st.write(f"**Description:** {req.get('description', '')}")
+                            if req.get('testable'):
+                                st.write("✅ Testable")
                     
-                    # Generate UVM from spec
-                    st.subheader("🚀 Generate Register Tests")
-                    st.info("💡 Combine with RTL upload in the RTL-Aware tab for complete testbench generation!")
-                    
-                    # Show JSON export
-                    with st.expander("📄 Export as JSON"):
-                        import json
-                        st.code(json.dumps(spec_dict, indent=2), language="json")
-                        st.download_button(
-                            "📥 Download JSON",
-                            json.dumps(spec_dict, indent=2),
-                            f"{parsed.name}_registers.json",
-                            "application/json"
-                        )
-                    
+                    # Generate verification plan
+                    if st.button("🚀 Generate Verification Plan", key="gen_vplan"):
+                        prompt = f"""Based on these requirements, generate a UVM verification plan:
+{requirements}
+
+Include:
+1. Test scenarios for each requirement
+2. Coverage points
+3. Assertions needed
+4. Recommended sequences"""
+                        result = generate_with_llm(prompt)
+                        st.code(result, language="markdown")
                 except Exception as e:
-                    st.error(f"❌ Error parsing specification: {str(e)}")
-                    import traceback
-                    st.code(traceback.format_exc())
-        else:
-            st.warning("Please upload or paste a specification")
+                    st.error(f"Error parsing spec: {str(e)}")
+        elif parse_btn:
+            st.warning("Please paste specification text first")
 
-# =============================================================================
-# TAB 4: Coverage Gap Analysis (NEW!)
-# =============================================================================
-with main_tab4:
-    st.markdown("""
-    ### 📊 Coverage Gap Analysis
+# Tab 4: Coverage Gap Analysis
+with tab4:
+    st.subheader("Coverage Gap Analysis")
+    st.write("Analyze your coverage reports to identify gaps and get suggestions for additional tests.")
     
-    **What this does:**
-    - 📈 Parses coverage **text summaries** from your simulation logs
-    - 🎯 Identifies uncovered bins and coverpoints
-    - 🚀 **Generates UVM sequences** to hit those gaps
+    col1, col2 = st.columns([1, 1])
     
-    > 💡 **Tip:** Export your coverage report as text from VCS/Questa/Xcelium, 
-    > or paste the coverage summary section from your simulation log.
-    
-    This is a MAJOR differentiator - ChatGPT can't analyze your coverage data
-    and suggest specific sequences to close gaps!
-    """)
-    
-    cov_col1, cov_col2 = st.columns([1, 1])
-    
-    with cov_col1:
-        st.subheader("📤 Coverage Report Input")
-        
-        st.info("📋 **Supported Format:** Text-based coverage summaries. Paste the coverage section from your simulation log or export as text.")
-        
-        cov_upload = st.file_uploader(
-            "Upload coverage text file",
-            type=['txt', 'log', 'rpt'],
-            help="Upload a text-based coverage report or log file"
+    with col1:
+        coverage_format = st.selectbox(
+            "Coverage Report Format",
+            ["Text Summary", "UCD (Unified Coverage Database)", "CSV"]
         )
         
-        st.markdown("**Or try the demo data below:**")
-        sample_coverage = """=== Coverage Report ===
-Covergroup: cg_apb_access
-  Coverpoint: cp_addr
-    bin addr_0x00: 45/100 (45%)
-    bin addr_0x04: 78/100 (78%)
-    bin addr_0x08: 12/100 (12%)  <-- GAP
-    bin addr_0x0C: 0/100 (0%)    <-- GAP
-  Coverpoint: cp_write
-    bin read_op: 85/100 (85%)
-    bin write_op: 23/100 (23%)   <-- GAP
-  Cross: cp_addr x cp_write
-    bin <addr_0x00, read_op>: 35/50 (70%)
-    bin <addr_0x00, write_op>: 10/50 (20%)  <-- GAP
-    bin <addr_0x04, read_op>: 50/50 (100%)
-    bin <addr_0x04, write_op>: 28/50 (56%)
-    bin <addr_0x08, read_op>: 2/50 (4%)     <-- GAP
-    bin <addr_0x08, write_op>: 0/50 (0%)    <-- GAP
+        coverage_text = st.text_area(
+            "Paste Coverage Report",
+            height=350,
+            placeholder="""Example coverage summary:
+=== Coverage Summary ===
+Functional Coverage: 75%
+  - apb_read_cg: 80%
+  - apb_write_cg: 70%
+  - error_cases_cg: 45%
 
-Overall Coverage: 67.3%
-Target: 95%"""
-        
-        cov_content = st.text_area(
-            "Coverage Summary",
-            height=300,
-            placeholder="Paste coverage report here...",
-            value=sample_coverage
+Code Coverage: 82%
+  - Line: 90%
+  - Branch: 75%
+  - Toggle: 80%
+
+Uncovered bins:
+  - apb_read_cg.burst_read: 0 hits
+  - error_cases_cg.timeout: 0 hits
+  - error_cases_cg.parity_error: 0 hits"""
         )
         
-        coverage_target = st.slider("Coverage Target (%)", 80, 100, 95)
-        
-        analyze_cov_btn = st.button("🔍 Analyze Coverage Gaps", key="cov_analyze", use_container_width=True)
+        analyze_cov_btn = st.button("📊 Analyze Coverage", type="primary", key="analyze_cov")
     
-    with cov_col2:
-        st.subheader("🎯 Coverage Analysis Results")
-        cov_results_placeholder = st.empty()
-    
-    if analyze_cov_btn:
-        content = ""
-        if cov_upload:
-            try:
-                content = cov_upload.read().decode('utf-8')
-            except:
-                content = str(cov_upload.read())
-        elif cov_content:
-            content = cov_content
-        
-        if content:
-            with st.spinner("🔍 Analyzing coverage gaps..."):
+    with col2:
+        if analyze_cov_btn and coverage_text:
+            with st.spinner("Analyzing coverage..."):
                 try:
                     analyzer = CoverageAnalyzer()
+                    analysis = analyzer.analyze(coverage_text)
                     
-                    # Parse the coverage report
-                    report = analyzer.parse_text_summary(content)
+                    # Display metrics
+                    st.subheader("Coverage Metrics")
+                    metrics = analysis.get('metrics', {})
                     
-                    # Analyze gaps
-                    gaps = analyzer.analyze_coverage(report, target_coverage=coverage_target)
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        func_cov = metrics.get('functional', 0)
+                        st.metric("Functional Coverage", f"{func_cov}%")
+                    with col_b:
+                        code_cov = metrics.get('code', 0)
+                        st.metric("Code Coverage", f"{code_cov}%")
                     
-                    with cov_results_placeholder.container():
-                        # Overall stats
-                        st.metric("Overall Coverage", f"{report.overall_coverage:.1f}%", 
-                                 delta=f"{report.overall_coverage - coverage_target:.1f}% vs target")
+                    # Show gaps
+                    gaps = analysis.get('gaps', [])
+                    if gaps:
+                        st.subheader("Identified Gaps")
+                        for gap in gaps:
+                            st.warning(f"🔴 {gap}")
+                    
+                    # Generate suggestions
+                    st.subheader("Suggested Tests")
+                    suggestions = analysis.get('suggestions', [])
+                    for i, sugg in enumerate(suggestions, 1):
+                        st.info(f"{i}. {sugg}")
+                    
+                    # Option to generate test code
+                    if st.button("🚀 Generate Tests for Gaps", key="gen_gap_tests"):
+                        prompt = f"""Generate UVM test sequences to cover these gaps:
+{gaps}
+
+Suggestions:
+{suggestions}
+
+Provide complete UVM sequence code for each gap."""
+                        result = generate_with_llm(prompt)
+                        st.code(result, language="systemverilog")
                         
-                        gcol1, gcol2 = st.columns(2)
-                        with gcol1:
-                            st.metric("Covergroups Analyzed", len(report.covergroups))
-                        with gcol2:
-                            st.metric("Gaps Found", len(gaps))
-                        
-                        if gaps:
-                            st.subheader("🎯 Identified Gaps")
-                            
-                            for i, gap in enumerate(gaps[:10]):  # Limit to top 10
-                                severity_color = "🔴" if gap.hit_count == 0 else "🟡"
-                                with st.expander(f"{severity_color} {gap.coverpoint}.{gap.bin_name} ({gap.current_coverage:.0f}%)", expanded=(i < 3)):
-                                    st.markdown(f"""
-                                    **Gap Details:**
-                                    - Current: {gap.current_coverage:.0f}% ({gap.hit_count} hits)
-                                    - Target: {gap.target_coverage:.0f}%
-                                    - Hits Needed: ~{gap.hits_needed}
-                                    """)
-                                    
-                                    # Generate suggestion
-                                    suggestion = analyzer.gap_to_suggestion(gap)
-                                    if suggestion:
-                                        st.markdown(f"**Suggested Sequence:**")
-                                        st.code(suggestion.uvm_sequence_code, language="systemverilog")
-                                        
-                                        if suggestion.stimulus_values:
-                                            st.markdown(f"**Stimulus Values:** `{suggestion.stimulus_values}`")
-                            
-                            st.divider()
-                            st.subheader("📥 Export Sequences")
-                            
-                            # Generate all sequences
-                            all_sequences = []
-                            for gap in gaps:
-                                suggestion = analyzer.gap_to_suggestion(gap)
-                                if suggestion:
-                                    all_sequences.append(f"// Sequence for {gap.coverpoint}.{gap.bin_name}")
-                                    all_sequences.append(suggestion.uvm_sequence_code)
-                                    all_sequences.append("")
-                            
-                            combined_code = "\n".join(all_sequences)
-                            
-                            st.download_button(
-                                "📥 Download All Gap-Closing Sequences",
-                                combined_code,
-                                "coverage_gap_sequences.sv",
-                                "text/plain",
-                                use_container_width=True
-                            )
-                        else:
-                            st.success("🎉 No significant coverage gaps found! Coverage target met.")
-                    
                 except Exception as e:
-                    st.error(f"❌ Error analyzing coverage: {str(e)}")
-                    import traceback
-                    st.code(traceback.format_exc())
-        else:
-            st.warning("Please upload or paste coverage data")
+                    st.error(f"Error analyzing coverage: {str(e)}")
+        elif analyze_cov_btn:
+            st.warning("Please paste coverage report first")
 
-# =============================================================================
-# TAB 5: SVA Assertion Generator (NEW!)
-# =============================================================================
-with main_tab5:
-    st.markdown("""
-    ### ✅ SVA Assertion Generator
+# Tab 5: SVA Generator
+with tab5:
+    st.subheader("SVA Assertion Generator")
+    st.write("Generate SystemVerilog Assertions from RTL analysis or natural language descriptions.")
     
-    **Automatically generate SystemVerilog Assertions from RTL!**
+    col1, col2 = st.columns([1, 1])
     
-    This is a HUGE time saver - writing good SVA takes hours or days.
-    VerifAI generates 50+ meaningful assertions in seconds:
-    
-    - 🔄 **Protocol Compliance** - APB, AXI, SPI, I2C, UART assertions
-    - 🤝 **Handshake Checks** - req/ack, valid/ready patterns
-    - 📊 **Stability Rules** - Data stable when valid
-    - 🔀 **FSM Properties** - No illegal states, transition coverage
-    - ⏰ **Timing Constraints** - Response time checks
-    - 🔄 **Reset Behavior** - Known values after reset
-    """)
-    
-    # Sample RTL for SVA demo
-    SAMPLE_SVA_RTL = '''module axi_lite_slave (
-    input  logic        aclk,
-    input  logic        aresetn,
-    // Write Address Channel
-    input  logic        awvalid,
-    output logic        awready,
-    input  logic [31:0] awaddr,
-    // Write Data Channel
-    input  logic        wvalid,
-    output logic        wready,
-    input  logic [31:0] wdata,
-    input  logic [3:0]  wstrb,
-    // Write Response Channel
-    output logic        bvalid,
-    input  logic        bready,
-    output logic [1:0]  bresp,
-    // Read Address Channel
-    input  logic        arvalid,
-    output logic        arready,
-    input  logic [31:0] araddr,
-    // Read Data Channel
-    output logic        rvalid,
-    input  logic        rready,
-    output logic [31:0] rdata,
-    output logic [1:0]  rresp
-);
-    // Internal registers
-    logic [31:0] reg_data [0:15];
-    
-    // Write state machine
-    typedef enum logic [1:0] {
-        W_IDLE, W_ADDR, W_DATA, W_RESP
-    } w_state_t;
-    w_state_t w_state;
-    
-    // Read state machine
-    typedef enum logic [1:0] {
-        R_IDLE, R_ADDR, R_DATA
-    } r_state_t;
-    r_state_t r_state;
-
-    assign bresp = 2'b00;  // OKAY
-    assign rresp = 2'b00;  // OKAY
-
-endmodule'''
-    
-    sva_col1, sva_col2 = st.columns([1, 1])
-    
-    with sva_col1:
-        st.subheader("📤 Upload RTL for SVA Generation")
+    with col1:
+        sva_mode = st.radio(
+            "Generation Mode",
+            ["From RTL", "From Description"],
+            horizontal=True
+        )
         
-        col_sva_upload, col_sva_sample = st.columns([2, 1])
-        with col_sva_upload:
-            sva_rtl_upload = st.file_uploader(
-                "Upload Verilog/SystemVerilog file",
-                type=['v', 'sv', 'vh', 'svh'],
-                help="Upload your DUT to generate assertions",
-                key="sva_upload"
+        if sva_mode == "From RTL":
+            # Sample button
+            if st.button("📋 Try Sample AXI RTL", key="sample_axi"):
+                st.session_state['sva_rtl_input'] = SAMPLE_AXI_RTL
+            
+            sva_rtl = st.text_area(
+                "RTL Code",
+                value=st.session_state.get('sva_rtl_input', ''),
+                height=300,
+                placeholder="Paste RTL to generate protocol-aware assertions..."
             )
-        with col_sva_sample:
-            if st.button("📋 Try Sample AXI", help="Load sample AXI-Lite slave"):
-                st.session_state['sample_sva_rtl'] = SAMPLE_SVA_RTL
-        
-        st.markdown("**Or paste RTL code:**")
-        sva_rtl_code = st.text_area(
-            "RTL Code for SVA",
-            height=300,
-            value=st.session_state.get('sample_sva_rtl', ''),
-            placeholder="""module apb_slave (
-    input  logic        pclk,
-    input  logic        preset_n,
-    input  logic        psel,
-    input  logic        penable,
-    input  logic        pwrite,
-    input  logic [31:0] paddr,
-    input  logic [31:0] pwdata,
-    output logic [31:0] prdata,
-    output logic        pready,
-    output logic        pslverr
-);
-// Your RTL here...
-endmodule""",
-            key="sva_code"
-        )
-        
-        # Options
-        st.subheader("⚙️ Generation Options")
-        
-        sva_categories = st.multiselect(
-            "Assertion Categories",
-            ["Protocol Compliance", "Handshake", "Stability", "FSM", "Timing", "Reset", "Data Integrity"],
-            default=["Protocol Compliance", "Handshake", "Stability", "Reset"]
-        )
-        
-        include_covers = st.checkbox("Include cover properties", value=True)
-        formal_friendly = st.checkbox("Formal verification friendly", value=True)
-        
-        gen_sva_btn = st.button("✅ Generate SVA Assertions", key="gen_sva", use_container_width=True)
-    
-    with sva_col2:
-        st.subheader("📊 RTL Analysis")
-        sva_analysis_placeholder = st.empty()
-    
-    if gen_sva_btn:
-        rtl_content = ""
-        if sva_rtl_upload:
-            rtl_content = sva_rtl_upload.read().decode('utf-8')
-        elif sva_rtl_code:
-            rtl_content = sva_rtl_code
-        
-        if rtl_content:
-            with st.spinner("🔍 Analyzing RTL and generating SVA..."):
-                try:
-                    # Parse RTL
-                    parser = RTLParser()
-                    parsed = parser.parse(rtl_content)
-                    
-                    # Show analysis
-                    with sva_analysis_placeholder.container():
-                        st.success(f"✅ Analyzed module: **{parsed.module_name}**")
-                        
-                        acol1, acol2, acol3 = st.columns(3)
-                        with acol1:
-                            st.metric("Input Ports", len([p for p in parsed.ports if p.direction == 'input']))
-                        with acol2:
-                            st.metric("Output Ports", len([p for p in parsed.ports if p.direction == 'output']))
-                        with acol3:
-                            if parsed.protocol_hints:
-                                top_protocol = max(parsed.protocol_hints, key=lambda x: x.confidence)
-                                st.metric("Detected Protocol", top_protocol.protocol)
-                            else:
-                                st.metric("Detected Protocol", "Generic")
-                        
-                        # Protocol hints
-                        if parsed.protocol_hints:
-                            st.subheader("🎯 Protocol Detection")
-                            for hint in parsed.protocol_hints[:3]:
-                                confidence_pct = int(hint.confidence * 100)
-                                st.progress(confidence_pct / 100, text=f"{hint.protocol}: {confidence_pct}%")
-                        
-                        # FSM info
-                        if parsed.fsm_info:
-                            st.subheader("🔄 FSM Detected")
-                            for fsm in parsed.fsm_info:
-                                st.write(f"**State Register:** {fsm.state_reg}")
-                                st.write(f"**States:** {', '.join(fsm.states[:8])}")
-                    
-                    # Generate SVA
-                    generator = SVAGenerator(parsed)
-                    sva_module = generator.generate_all()
-                    sva_code = sva_module.to_sv()
-                    
-                    st.divider()
-                    st.subheader("✅ Generated Assertions")
-                    
-                    # Stats
-                    scol1, scol2, scol3 = st.columns(3)
-                    with scol1:
-                        st.metric("Total Properties", len(sva_module.properties))
-                    with scol2:
-                        asserts = len([p for p in sva_module.properties if p.assertion_type.value == "assert"])
-                        st.metric("Assert Directives", asserts)
-                    with scol3:
-                        covers = len([p for p in sva_module.properties if p.assertion_type.value == "cover"])
-                        st.metric("Cover Properties", covers)
-                    
-                    # Category breakdown
-                    from collections import Counter
-                    categories = Counter(p.category.value for p in sva_module.properties)
-                    
-                    st.subheader("📊 By Category")
-                    for cat, count in sorted(categories.items(), key=lambda x: -x[1]):
-                        st.progress(count / len(sva_module.properties), text=f"{cat}: {count} assertions")
-                    
-                    # Code preview
-                    st.subheader("📄 Generated SVA Code")
-                    st.code(sva_code, language="systemverilog")
-                    
-                    # Download
-                    st.download_button(
-                        "📥 Download SVA Module",
-                        sva_code,
-                        f"{parsed.module_name}_sva.sv",
-                        "text/plain",
-                        use_container_width=True
-                    )
-                    
-                    # Individual properties
-                    with st.expander("📋 Property Details"):
-                        for prop in sva_module.properties:
-                            icon = "✅" if prop.assertion_type.value == "assert" else "📊"
-                            st.markdown(f"**{icon} {prop.name}** ({prop.category.value})")
-                            st.markdown(f"*{prop.description}*")
-                            st.code(prop.code, language="systemverilog")
-                            st.divider()
-                    
-                except Exception as e:
-                    st.error(f"❌ Error: {str(e)}")
-                    import traceback
-                    st.code(traceback.format_exc())
+            gen_input = sva_rtl
         else:
-            st.warning("Please upload or paste RTL code")
+            sva_desc = st.text_area(
+                "Describe Assertions Needed",
+                height=300,
+                placeholder="""Example:
+- Request must be acknowledged within 4 cycles
+- Data valid should only be high when enable is high
+- After reset, all outputs should be zero
+- FIFO should never overflow"""
+            )
+            gen_input = sva_desc
+        
+        gen_sva_btn = st.button("✅ Generate Assertions", type="primary", key="gen_sva")
+    
+    with col2:
+        if gen_sva_btn and gen_input:
+            with st.spinner("Generating assertions..."):
+                try:
+                    if sva_mode == "From RTL":
+                        parsed = parse_rtl(gen_input)
+                        sva_gen = SVAGenerator()
+                        assertions = sva_gen.generate_from_rtl(parsed)
+                        
+                        st.success(f"✅ Generated {len(assertions)} assertions")
+                        
+                        # Group by type
+                        st.subheader("Generated Assertions")
+                        
+                        all_code = []
+                        for a in assertions:
+                            with st.expander(f"{a['type']}: {a['name']}", expanded=True):
+                                st.code(a['code'], language="systemverilog")
+                                st.write(f"*{a.get('description', '')}*")
+                                all_code.append(f"// {a['name']}\n{a['code']}")
+                        
+                        combined = "\n\n".join(all_code)
+                        st.download_button(
+                            "📥 Download All Assertions",
+                            combined,
+                            f"{parsed.module_name}_sva.sv",
+                            mime="text/plain"
+                        )
+                    else:
+                        # Generate from description using LLM
+                        prompt = f"""Generate SystemVerilog Assertions (SVA) for these requirements:
+{gen_input}
+
+For each assertion provide:
+1. Property name
+2. SVA property code
+3. Assert and cover directives
+4. Brief description
+
+Use proper SVA syntax with ##, |=>, throughout, etc."""
+                        result = generate_with_llm(prompt)
+                        st.code(result, language="systemverilog")
+                        st.download_button(
+                            "📥 Download Assertions",
+                            result,
+                            "assertions.sv",
+                            mime="text/plain"
+                        )
+                except Exception as e:
+                    st.error(f"Error generating assertions: {str(e)}")
+        elif gen_sva_btn:
+            st.warning("Please provide RTL code or description first")
 
 # Footer
 st.markdown("---")
 st.markdown("""
-<div style="text-align: center; color: #888; padding: 1rem;">
-    Made with ❤️ by <a href="https://github.com/tusharpathaknyu">Tushar Pathak</a> | 
-    <a href="https://github.com/tusharpathaknyu/VerifAI">⭐ Star on GitHub</a>
+<div style="text-align: center; color: #666; font-size: 0.9rem;">
+    <p><strong>VerifAI</strong> - UVM Testbench Generator</p>
+    <p>Supports APB, AXI4-Lite, UART, SPI, I2C protocols</p>
+    <p><a href="https://github.com/tusharpathaknyu/VerifAI" target="_blank">GitHub</a></p>
 </div>
 """, unsafe_allow_html=True)
