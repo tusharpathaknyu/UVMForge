@@ -12,7 +12,6 @@ from src.rtl_aware_gen import RTLAwareGenerator
 from src.coverage_analyzer import CoverageAnalyzer
 from src.sva_generator import SVAGenerator
 
-# Page config
 st.set_page_config(
     page_title="VerifAI",
     page_icon=None,
@@ -20,264 +19,279 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Modern CSS
+# Clean professional CSS
 st.markdown("""
 <style>
-    /* Hide Streamlit branding */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
+    /* Hide defaults */
+    #MainMenu, footer, header {visibility: hidden;}
+    .block-container {padding-top: 2rem; padding-bottom: 0;}
     
-    /* Modern dark theme */
+    /* Dark theme */
     .stApp {
-        background: linear-gradient(180deg, #0f0f1a 0%, #1a1a2e 100%);
+        background: #0a0a0f;
     }
     
-    /* Hero section */
+    /* Navigation */
+    .nav {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 0;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        margin-bottom: 2rem;
+    }
+    .logo {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #fff;
+        letter-spacing: -0.5px;
+    }
+    .nav-links {
+        display: flex;
+        gap: 2rem;
+    }
+    .nav-links a {
+        color: #888;
+        text-decoration: none;
+        font-size: 0.9rem;
+        transition: color 0.2s;
+    }
+    .nav-links a:hover {
+        color: #fff;
+    }
+    
+    /* Hero */
     .hero {
         text-align: center;
-        padding: 2rem 0;
-        margin-bottom: 1rem;
+        padding: 4rem 0 3rem;
     }
     .hero h1 {
-        font-size: 3.5rem;
-        font-weight: 800;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 0.5rem;
+        font-size: 3.2rem;
+        font-weight: 700;
+        color: #fff;
+        margin-bottom: 1rem;
+        letter-spacing: -1px;
     }
     .hero p {
-        color: #a0a0b0;
-        font-size: 1.2rem;
-        max-width: 600px;
-        margin: 0 auto;
+        color: #666;
+        font-size: 1.15rem;
+        max-width: 500px;
+        margin: 0 auto 2rem;
+        line-height: 1.6;
     }
     
-    /* Protocol chips */
-    .chip-container {
+    /* Mode selector */
+    .mode-selector {
         display: flex;
         justify-content: center;
         gap: 0.5rem;
-        flex-wrap: wrap;
-        margin: 1.5rem 0;
+        margin-bottom: 3rem;
     }
-    .chip {
-        background: rgba(102, 126, 234, 0.15);
-        border: 1px solid rgba(102, 126, 234, 0.3);
-        color: #667eea;
-        padding: 0.4rem 1rem;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: 500;
-    }
-    
-    /* Feature cards */
-    .features {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 1rem;
-        margin: 2rem 0;
-    }
-    .feature-card {
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 12px;
-        padding: 1.2rem;
-        text-align: center;
-        transition: all 0.3s ease;
-    }
-    .feature-card:hover {
-        border-color: rgba(102, 126, 234, 0.5);
-        transform: translateY(-2px);
-    }
-    .feature-icon {
-        font-size: 1.8rem;
-        margin-bottom: 0.5rem;
-    }
-    .feature-title {
-        color: #fff;
-        font-weight: 600;
-        font-size: 0.95rem;
-        margin-bottom: 0.3rem;
-    }
-    .feature-desc {
-        color: #888;
-        font-size: 0.8rem;
-    }
-    
-    /* Tabs styling */
-    .stTabs [data-baseweb="tab-list"] {
-        background: rgba(255,255,255,0.03);
-        border-radius: 12px;
-        padding: 0.5rem;
-        gap: 0.5rem;
-    }
-    .stTabs [data-baseweb="tab"] {
+    .mode-btn {
         background: transparent;
-        border-radius: 8px;
-        color: #888;
-        padding: 0.8rem 1.5rem;
-        font-weight: 500;
+        border: 1px solid rgba(255,255,255,0.1);
+        color: #666;
+        padding: 0.6rem 1.2rem;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.2s;
     }
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white !important;
+    .mode-btn:hover {
+        border-color: rgba(255,255,255,0.2);
+        color: #999;
+    }
+    .mode-btn.active {
+        background: #fff;
+        color: #000;
+        border-color: #fff;
     }
     
-    /* Input areas */
+    /* Main input area */
+    .input-container {
+        max-width: 900px;
+        margin: 0 auto;
+    }
+    
+    /* Text area styling */
     .stTextArea textarea {
-        background: rgba(255,255,255,0.05) !important;
-        border: 1px solid rgba(255,255,255,0.1) !important;
-        border-radius: 10px !important;
+        background: rgba(255,255,255,0.03) !important;
+        border: 1px solid rgba(255,255,255,0.08) !important;
+        border-radius: 12px !important;
         color: #e0e0e0 !important;
-        font-family: 'Monaco', 'Menlo', monospace !important;
+        font-family: 'SF Mono', 'Monaco', 'Menlo', monospace !important;
+        font-size: 0.9rem !important;
+        padding: 1rem !important;
     }
     .stTextArea textarea:focus {
-        border-color: #667eea !important;
-        box-shadow: 0 0 0 1px #667eea !important;
+        border-color: rgba(255,255,255,0.2) !important;
+        box-shadow: none !important;
+    }
+    .stTextArea textarea::placeholder {
+        color: #444 !important;
     }
     
     /* Buttons */
     .stButton > button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+        background: #fff;
+        color: #000;
         border: none;
         border-radius: 8px;
-        padding: 0.6rem 1.5rem;
+        padding: 0.7rem 2rem;
         font-weight: 600;
-        transition: all 0.3s ease;
+        font-size: 0.9rem;
+        transition: all 0.2s;
     }
     .stButton > button:hover {
+        background: #e0e0e0;
         transform: translateY(-1px);
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
     }
     
     /* Secondary buttons */
     .stButton > button[kind="secondary"] {
-        background: rgba(255,255,255,0.1);
-        border: 1px solid rgba(255,255,255,0.2);
+        background: transparent;
+        color: #888;
+        border: 1px solid rgba(255,255,255,0.1);
     }
-    
-    /* Code blocks */
-    .stCodeBlock {
-        border-radius: 10px !important;
-    }
-    
-    /* Expanders */
-    .streamlit-expanderHeader {
+    .stButton > button[kind="secondary"]:hover {
         background: rgba(255,255,255,0.05);
-        border-radius: 8px;
+        color: #fff;
+    }
+    
+    /* Tabs - minimal */
+    .stTabs [data-baseweb="tab-list"] {
+        background: transparent;
+        gap: 0;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        justify-content: center;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background: transparent;
+        color: #555;
+        padding: 1rem 1.5rem;
+        font-size: 0.9rem;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+    }
+    .stTabs [aria-selected="true"] {
+        color: #fff !important;
+        background: transparent !important;
+        border-bottom: 2px solid #fff;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: #999;
+    }
+    
+    /* Results area */
+    .stCodeBlock {
+        border-radius: 12px !important;
+    }
+    pre {
+        background: rgba(255,255,255,0.03) !important;
+        border: 1px solid rgba(255,255,255,0.08) !important;
     }
     
     /* Metrics */
     [data-testid="stMetricValue"] {
-        color: #667eea;
+        color: #fff;
+        font-size: 1.5rem;
     }
-    
-    /* Selectbox */
-    .stSelectbox > div > div {
-        background: rgba(255,255,255,0.05);
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 8px;
-    }
-    
-    /* Success/Warning/Error messages */
-    .stSuccess {
-        background: rgba(46, 204, 113, 0.1);
-        border: 1px solid rgba(46, 204, 113, 0.3);
-        border-radius: 8px;
-    }
-    .stWarning {
-        background: rgba(241, 196, 15, 0.1);
-        border: 1px solid rgba(241, 196, 15, 0.3);
-        border-radius: 8px;
-    }
-    
-    /* Footer */
-    .footer {
-        text-align: center;
-        padding: 2rem 0;
-        color: #666;
-        font-size: 0.85rem;
-        border-top: 1px solid rgba(255,255,255,0.05);
-        margin-top: 3rem;
-    }
-    .footer a {
-        color: #667eea;
-        text-decoration: none;
+    [data-testid="stMetricLabel"] {
+        color: #555;
     }
     
     /* Download button */
     .stDownloadButton > button {
-        background: rgba(46, 204, 113, 0.2);
-        border: 1px solid rgba(46, 204, 113, 0.4);
-        color: #2ecc71;
+        background: transparent;
+        color: #888;
+        border: 1px solid rgba(255,255,255,0.1);
     }
     .stDownloadButton > button:hover {
-        background: rgba(46, 204, 113, 0.3);
+        background: rgba(255,255,255,0.05);
+        color: #fff;
+        border-color: rgba(255,255,255,0.2);
     }
     
-    /* Analysis results card */
-    .analysis-card {
+    /* Selectbox */
+    .stSelectbox > div > div {
         background: rgba(255,255,255,0.03);
         border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 12px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-    }
-    .analysis-card h4 {
-        color: #667eea;
-        margin-bottom: 0.5rem;
+        border-radius: 8px;
     }
     
-    /* Sample button */
-    .sample-btn {
-        background: rgba(102, 126, 234, 0.1) !important;
-        border: 1px solid rgba(102, 126, 234, 0.3) !important;
-        color: #667eea !important;
+    /* Expander */
+    .streamlit-expanderHeader {
+        background: rgba(255,255,255,0.03);
+        border-radius: 8px;
+        color: #888;
+    }
+    
+    /* Footer */
+    .footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 1rem 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.8rem;
+        color: #444;
+        background: linear-gradient(transparent, #0a0a0f);
+    }
+    .footer a {
+        color: #555;
+        text-decoration: none;
+    }
+    .footer a:hover {
+        color: #888;
+    }
+    
+    /* Radio buttons horizontal */
+    .stRadio > div {
+        flex-direction: row;
+        gap: 1rem;
+    }
+    .stRadio label {
+        color: #888 !important;
+    }
+    
+    /* Slider */
+    .stSlider > div > div {
+        color: #888;
+    }
+    
+    /* Success/warning/info */
+    .stSuccess, .stWarning, .stInfo {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 8px;
+    }
+    
+    /* Columns spacing */
+    [data-testid="column"] {
+        padding: 0 1rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Hero Section
+# Navigation
+st.markdown("""
+<div class="nav">
+    <div class="logo">VerifAI</div>
+    <div class="nav-links">
+        <a href="https://github.com/tusharpathaknyu/VerifAI" target="_blank">GitHub</a>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# Hero
 st.markdown("""
 <div class="hero">
-    <h1>VerifAI</h1>
-    <p>Generate production-ready UVM testbenches from RTL code. 
-    Intelligent analysis, protocol detection, and assertion generation.</p>
-</div>
-""", unsafe_allow_html=True)
-
-# Protocol chips
-st.markdown("""
-<div class="chip-container">
-    <span class="chip">APB</span>
-    <span class="chip">AXI4-Lite</span>
-    <span class="chip">UART</span>
-    <span class="chip">SPI</span>
-    <span class="chip">I2C</span>
-</div>
-""", unsafe_allow_html=True)
-
-# Feature cards
-st.markdown("""
-<div class="features">
-    <div class="feature-card">
-        <div class="feature-title">RTL Analysis</div>
-        <div class="feature-desc">Auto-detect signals, FSMs, protocols</div>
-    </div>
-    <div class="feature-card">
-        <div class="feature-title">UVM Generation</div>
-        <div class="feature-desc">Complete testbench components</div>
-    </div>
-    <div class="feature-card">
-        <div class="feature-title">Coverage Analysis</div>
-        <div class="feature-desc">Identify gaps, suggest tests</div>
-    </div>
-    <div class="feature-card">
-        <div class="feature-title">SVA Generator</div>
-        <div class="feature-desc">Protocol-aware assertions</div>
-    </div>
+    <h1>UVM Testbench Generator</h1>
+    <p>Generate production-ready verification components from RTL. 
+    Supports APB, AXI4-Lite, UART, SPI, and I2C.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -300,7 +314,7 @@ def generate_with_llm(prompt: str) -> str:
         return f"Error: {str(e)}"
 
 # Sample RTL
-SAMPLE_APB_RTL = '''module apb_slave (
+SAMPLE_APB = '''module apb_slave (
     input  wire        pclk,
     input  wire        presetn,
     input  wire        psel,
@@ -313,11 +327,7 @@ SAMPLE_APB_RTL = '''module apb_slave (
     output reg         pslverr
 );
     reg [31:0] mem [0:255];
-    
-    localparam IDLE   = 2'b00;
-    localparam SETUP  = 2'b01;
-    localparam ACCESS = 2'b10;
-    
+    localparam IDLE = 2'b00, SETUP = 2'b01, ACCESS = 2'b10;
     reg [1:0] state, next_state;
     
     always @(posedge pclk or negedge presetn) begin
@@ -335,7 +345,7 @@ SAMPLE_APB_RTL = '''module apb_slave (
     end
 endmodule'''
 
-SAMPLE_AXI_RTL = '''module axi_lite_slave (
+SAMPLE_AXI = '''module axi_lite_slave (
     input  wire        aclk,
     input  wire        aresetn,
     input  wire        awvalid,
@@ -360,83 +370,73 @@ SAMPLE_AXI_RTL = '''module axi_lite_slave (
     reg [1:0] w_state;
 endmodule'''
 
-# Main tabs
-st.markdown("<br>", unsafe_allow_html=True)
-tabs = st.tabs(["RTL-Aware Generator", "Protocol Templates", "Spec Import", "Coverage Analysis", "SVA Generator"])
+# Tabs
+tabs = st.tabs(["Generate from RTL", "Protocol Templates", "Coverage Analysis", "SVA Assertions"])
 
 # Tab 1: RTL-Aware Generator
 with tabs[0]:
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns([1, 1], gap="large")
     
     with col1:
-        st.markdown("#### Paste Your RTL")
-        
-        # Sample buttons
-        c1, c2, c3 = st.columns([1, 1, 2])
+        # Sample buttons row
+        c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
         with c1:
-            if st.button("APB Sample", key="sample_apb", use_container_width=True):
-                st.session_state['rtl_input'] = SAMPLE_APB_RTL
+            if st.button("Load APB", use_container_width=True):
+                st.session_state['rtl_input'] = SAMPLE_APB
         with c2:
-            if st.button("AXI Sample", key="sample_axi", use_container_width=True):
-                st.session_state['rtl_input'] = SAMPLE_AXI_RTL
+            if st.button("Load AXI", use_container_width=True):
+                st.session_state['rtl_input'] = SAMPLE_AXI
         
         rtl_code = st.text_area(
             "RTL Code",
             value=st.session_state.get('rtl_input', ''),
-            height=350,
-            placeholder="// Paste your Verilog/SystemVerilog code here...",
+            height=400,
+            placeholder="// Paste your Verilog or SystemVerilog RTL here...\n\nmodule my_design (\n    input  wire clk,\n    input  wire rst_n,\n    ...\n);",
             label_visibility="collapsed"
         )
         
-        analyze_btn = st.button("Analyze & Generate", type="primary", use_container_width=True)
+        generate_btn = st.button("Generate Testbench", type="primary", use_container_width=True)
     
     with col2:
-        st.markdown("#### Generated Output")
-        
-        if analyze_btn and rtl_code:
-            with st.spinner("Analyzing RTL..."):
+        if generate_btn and rtl_code:
+            with st.spinner("Analyzing..."):
                 try:
                     parsed = parse_rtl(rtl_code)
                     
-                    # Analysis summary
-                    st.success(f"✓ Analyzed: **{parsed.module_name}**")
+                    st.markdown(f"**Module:** `{parsed.module_name}`")
                     
                     c1, c2, c3 = st.columns(3)
                     c1.metric("Inputs", len(parsed.inputs))
                     c2.metric("Outputs", len(parsed.outputs))
-                    c3.metric("FSM", "Yes" if parsed.fsm else "No")
+                    c3.metric("FSM", "Detected" if parsed.fsm else "None")
                     
-                    with st.expander("Analysis Details", expanded=False):
-                        if parsed.clocks:
-                            st.write(f"**Clocks:** {', '.join(parsed.clocks)}")
-                        if parsed.resets:
-                            st.write(f"**Resets:** {', '.join(parsed.resets)}")
-                        if parsed.fsm:
-                            st.write(f"**FSM States:** {parsed.fsm.get('states', [])}")
-                    
-                    # Generate testbench
                     generator = RTLAwareGenerator()
                     prompt = generator.generate_prompt(parsed)
                     result = generate_with_llm(prompt)
                     
                     st.code(result, language="systemverilog")
-                    st.download_button("Download Testbench", result, f"{parsed.module_name}_tb.sv", use_container_width=True)
+                    st.download_button("Download", result, f"{parsed.module_name}_tb.sv", use_container_width=True)
                     
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
-        elif analyze_btn:
-            st.warning("Please paste RTL code first")
+        elif generate_btn:
+            st.warning("Paste RTL code first")
         else:
-            st.info("Paste RTL code and click Analyze to generate a UVM testbench")
+            st.markdown("""
+            <div style="color: #444; padding: 2rem; text-align: center;">
+                <p style="font-size: 1rem; margin-bottom: 0.5rem;">Paste RTL code and generate</p>
+                <p style="font-size: 0.85rem;">Supports Verilog and SystemVerilog</p>
+            </div>
+            """, unsafe_allow_html=True)
 
 # Tab 2: Protocol Templates
 with tabs[1]:
-    col1, col2 = st.columns([1, 2])
+    col1, col2 = st.columns([1, 2], gap="large")
     
     with col1:
-        st.markdown("#### Configuration")
+        protocol = st.selectbox("Protocol", ["APB", "AXI4-Lite", "UART", "SPI", "I2C"], label_visibility="collapsed")
         
-        protocol = st.selectbox("Protocol", ["APB", "AXI4-Lite", "UART", "SPI", "I2C"])
+        st.markdown("<br>", unsafe_allow_html=True)
         
         if protocol == "APB":
             addr_width = st.slider("Address Width", 8, 64, 32)
@@ -447,239 +447,158 @@ with tabs[1]:
             data_width = st.selectbox("Data Width", [32, 64])
             config = {"addr_width": addr_width, "data_width": data_width}
         elif protocol == "UART":
-            baud_rate = st.selectbox("Baud Rate", [9600, 19200, 38400, 57600, 115200])
-            data_bits = st.selectbox("Data Bits", [7, 8])
-            config = {"baud_rate": baud_rate, "data_bits": data_bits}
+            baud = st.selectbox("Baud Rate", [9600, 19200, 38400, 57600, 115200])
+            config = {"baud_rate": baud}
         elif protocol == "SPI":
             cpol = st.selectbox("CPOL", [0, 1])
             cpha = st.selectbox("CPHA", [0, 1])
             config = {"cpol": cpol, "cpha": cpha}
-        else:  # I2C
-            speed = st.selectbox("Speed", ["Standard (100kHz)", "Fast (400kHz)", "Fast+ (1MHz)"])
+        else:
+            speed = st.selectbox("Speed", ["Standard", "Fast", "Fast+"])
             config = {"speed": speed}
         
-        generate_btn = st.button("Generate", type="primary", use_container_width=True, key="gen_proto")
+        st.markdown("<br>", unsafe_allow_html=True)
+        gen_btn = st.button("Generate", type="primary", use_container_width=True, key="proto_gen")
     
     with col2:
-        st.markdown("#### Generated Testbench")
-        
-        if generate_btn:
+        if gen_btn:
             with st.spinner("Generating..."):
                 template = PROTOCOL_TEMPLATES.get(protocol.lower().replace("-", "_").replace("4_", "4"), 
                                                   PROTOCOL_TEMPLATES.get("apb", ""))
-                prompt = f"""Generate a complete UVM testbench for {protocol} protocol with config: {config}
-
+                prompt = f"""Generate a complete UVM testbench for {protocol} protocol.
+Configuration: {config}
 Include: interface, sequence_item, driver, monitor, agent, scoreboard, env, test, coverage.
-Use proper UVM methodology. Base template:
 {template}"""
                 result = generate_with_llm(prompt)
                 st.code(result, language="systemverilog")
                 st.download_button("Download", result, f"{protocol.lower()}_tb.sv", use_container_width=True)
         else:
-            st.info("Configure protocol parameters and click Generate")
+            st.markdown("""
+            <div style="color: #444; padding: 3rem; text-align: center;">
+                <p>Select a protocol and configure parameters</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-# Tab 3: Spec Import
+# Tab 3: Coverage Analysis
 with tabs[2]:
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns([1, 1], gap="large")
     
     with col1:
-        st.markdown("#### Specification Input")
-        
-        spec_format = st.selectbox("Format", ["Plain Text/Markdown", "JSON", "CSV"])
-        
-        spec_text = st.text_area(
-            "Specification",
-            height=300,
-            placeholder="""Example:
-## Protocol Requirements
-- All transactions must complete within 16 cycles
-- PREADY must assert within 4 cycles of PENABLE
-- Address must be aligned to data width
-- Error response for invalid addresses""",
-            label_visibility="collapsed"
-        )
-        
-        parse_btn = st.button("Parse & Extract", type="primary", use_container_width=True)
-    
-    with col2:
-        st.markdown("#### Extracted Requirements")
-        
-        if parse_btn and spec_text:
-            with st.spinner("Parsing..."):
-                try:
-                    parser = SpecParser()
-                    requirements = parser.parse(spec_text)
-                    
-                    st.success(f"✓ Extracted **{len(requirements.registers) if hasattr(requirements, 'registers') else 0}** items")
-                    
-                    # Show as verification points
-                    prompt = f"""Extract testable requirements from this spec and create a verification plan:
-{spec_text}
-
-List each requirement with:
-1. ID
-2. Description  
-3. How to test it
-4. Coverage point"""
-                    result = generate_with_llm(prompt)
-                    st.markdown(result)
-                    
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
-        elif parse_btn:
-            st.warning("Please paste specification first")
-        else:
-            st.info("Paste a protocol specification to extract verification requirements")
-
-# Tab 4: Coverage Analysis
-with tabs[3]:
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        st.markdown("#### Coverage Report")
-        
         coverage_text = st.text_area(
-            "Coverage Data",
-            height=300,
-            placeholder="""=== Coverage Summary ===
-Functional Coverage: 75%
-  - read_cg: 80%
-  - write_cg: 70%
-  - error_cg: 45%
-
-Code Coverage: 82%
-  - Line: 90%
-  - Branch: 75%
-
-Uncovered:
-  - burst_read: 0 hits
-  - timeout_error: 0 hits""",
+            "Coverage Report",
+            height=350,
+            placeholder="Paste your coverage report here...\n\nExample:\nFunctional Coverage: 75%\n  - read_cg: 80%\n  - write_cg: 70%\n\nUncovered bins:\n  - burst_read: 0 hits",
             label_visibility="collapsed"
         )
         
-        analyze_btn = st.button("Analyze Gaps", type="primary", use_container_width=True, key="cov_analyze")
+        analyze_btn = st.button("Analyze", type="primary", use_container_width=True, key="cov_btn")
     
     with col2:
-        st.markdown("#### Analysis Results")
-        
         if analyze_btn and coverage_text:
             with st.spinner("Analyzing..."):
                 try:
                     analyzer = CoverageAnalyzer()
                     analysis = analyzer.analyze(coverage_text)
                     
-                    # Metrics
                     metrics = analysis.get('metrics', {})
                     c1, c2 = st.columns(2)
                     c1.metric("Functional", f"{metrics.get('functional', 0)}%")
                     c2.metric("Code", f"{metrics.get('code', 0)}%")
                     
-                    # Gaps
                     gaps = analysis.get('gaps', [])
                     if gaps:
-                        st.markdown("**Identified Gaps:**")
+                        st.markdown("**Gaps:**")
                         for gap in gaps:
-                            st.warning(gap)
+                            st.text(f"• {gap}")
                     
-                    # Suggestions
                     suggestions = analysis.get('suggestions', [])
                     if suggestions:
-                        st.markdown("**Suggested Tests:**")
-                        for i, s in enumerate(suggestions, 1):
-                            st.info(f"{i}. {s}")
-                    
-                    if st.button("Generate Tests for Gaps", use_container_width=True):
-                        prompt = f"Generate UVM sequences to cover these gaps: {gaps}"
-                        result = generate_with_llm(prompt)
-                        st.code(result, language="systemverilog")
-                        
+                        st.markdown("**Suggestions:**")
+                        for s in suggestions:
+                            st.text(f"• {s}")
+                            
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
         elif analyze_btn:
-            st.warning("Please paste coverage report first")
+            st.warning("Paste coverage report first")
         else:
-            st.info("Paste coverage report to identify gaps and get test suggestions")
+            st.markdown("""
+            <div style="color: #444; padding: 3rem; text-align: center;">
+                <p>Paste coverage report to identify gaps</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-# Tab 5: SVA Generator
-with tabs[4]:
-    col1, col2 = st.columns([1, 1])
+# Tab 4: SVA Generator
+with tabs[3]:
+    col1, col2 = st.columns([1, 1], gap="large")
     
     with col1:
-        st.markdown("#### Input")
+        mode = st.radio("Input type", ["RTL Code", "Description"], horizontal=True, label_visibility="collapsed")
         
-        sva_mode = st.radio("Mode", ["From RTL", "From Description"], horizontal=True)
-        
-        if sva_mode == "From RTL":
-            c1, c2 = st.columns(2)
+        if mode == "RTL Code":
+            c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
             with c1:
-                if st.button("APB Sample", key="sva_apb"):
-                    st.session_state['sva_input'] = SAMPLE_APB_RTL
+                if st.button("Load APB", key="sva_apb"):
+                    st.session_state['sva_input'] = SAMPLE_APB
             with c2:
-                if st.button("AXI Sample", key="sva_axi"):
-                    st.session_state['sva_input'] = SAMPLE_AXI_RTL
+                if st.button("Load AXI", key="sva_axi"):
+                    st.session_state['sva_input'] = SAMPLE_AXI
             
             sva_input = st.text_area(
-                "RTL",
+                "Input",
                 value=st.session_state.get('sva_input', ''),
-                height=280,
+                height=320,
                 placeholder="// Paste RTL code...",
                 label_visibility="collapsed"
             )
         else:
             sva_input = st.text_area(
-                "Description",
-                height=300,
-                placeholder="""Describe the assertions needed:
-- Request must be acknowledged within 4 cycles
-- Data valid only when enable is high
-- After reset, all outputs should be zero
-- No back-to-back writes allowed""",
+                "Input",
+                height=350,
+                placeholder="Describe the assertions needed:\n\n• Request acknowledged within 4 cycles\n• Data valid only when enable is high\n• After reset, outputs are zero",
                 label_visibility="collapsed"
             )
         
-        gen_btn = st.button("Generate Assertions", type="primary", use_container_width=True)
+        sva_btn = st.button("Generate Assertions", type="primary", use_container_width=True)
     
     with col2:
-        st.markdown("#### Generated SVA")
-        
-        if gen_btn and sva_input:
+        if sva_btn and sva_input:
             with st.spinner("Generating..."):
                 try:
-                    if sva_mode == "From RTL":
+                    if mode == "RTL Code":
                         parsed = parse_rtl(sva_input)
                         sva_gen = SVAGenerator()
                         assertions = sva_gen.generate_from_rtl(parsed)
                         
-                        st.success(f"✓ Generated **{len(assertions)}** assertions")
-                        
-                        all_code = []
-                        for a in assertions:
-                            with st.expander(f"**{a['name']}** ({a['type']})", expanded=False):
-                                st.code(a['code'], language="systemverilog")
-                            all_code.append(f"// {a['name']}\n{a['code']}")
-                        
+                        all_code = [f"// {a['name']}\n{a['code']}" for a in assertions]
                         combined = "\n\n".join(all_code)
-                        st.download_button("Download All", combined, f"{parsed.module_name}_sva.sv", use_container_width=True)
+                        
+                        st.code(combined, language="systemverilog")
+                        st.download_button("Download", combined, f"{parsed.module_name}_sva.sv", use_container_width=True)
                     else:
                         prompt = f"""Generate SVA assertions for:
 {sva_input}
 
-For each, provide property name, SVA code with ##, |=>, throughout syntax, and assert/cover directives."""
+Provide property name, SVA code with ##, |=>, throughout syntax."""
                         result = generate_with_llm(prompt)
                         st.code(result, language="systemverilog")
                         st.download_button("Download", result, "assertions.sv", use_container_width=True)
                         
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
-        elif gen_btn:
-            st.warning("Please provide input first")
+        elif sva_btn:
+            st.warning("Provide input first")
         else:
-            st.info("Provide RTL or description to generate SystemVerilog assertions")
+            st.markdown("""
+            <div style="color: #444; padding: 3rem; text-align: center;">
+                <p>Generate protocol-aware assertions from RTL or description</p>
+            </div>
+            """, unsafe_allow_html=True)
 
 # Footer
 st.markdown("""
 <div class="footer">
-    <p>Built for hardware verification engineers</p>
-    <p><a href="https://github.com/tusharpathaknyu/VerifAI">GitHub</a> · MIT License</p>
+    <span>Built by Tushar Pathak</span>
+    <a href="https://github.com/tusharpathaknyu/VerifAI" target="_blank">View on GitHub</a>
 </div>
 """, unsafe_allow_html=True)
