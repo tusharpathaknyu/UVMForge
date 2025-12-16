@@ -15,7 +15,7 @@ from src.sva_generator import SVAGenerator
 # Page config
 st.set_page_config(
     page_title="VerifAI",
-    page_icon="⚡",
+    page_icon=None,
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -242,7 +242,7 @@ st.markdown("""
 # Hero Section
 st.markdown("""
 <div class="hero">
-    <h1>⚡ VerifAI</h1>
+    <h1>VerifAI</h1>
     <p>Generate production-ready UVM testbenches from RTL code. 
     Intelligent analysis, protocol detection, and assertion generation.</p>
 </div>
@@ -263,22 +263,18 @@ st.markdown("""
 st.markdown("""
 <div class="features">
     <div class="feature-card">
-        <div class="feature-icon">🔍</div>
         <div class="feature-title">RTL Analysis</div>
         <div class="feature-desc">Auto-detect signals, FSMs, protocols</div>
     </div>
     <div class="feature-card">
-        <div class="feature-icon">📝</div>
         <div class="feature-title">UVM Generation</div>
         <div class="feature-desc">Complete testbench components</div>
     </div>
     <div class="feature-card">
-        <div class="feature-icon">📊</div>
         <div class="feature-title">Coverage Analysis</div>
         <div class="feature-desc">Identify gaps, suggest tests</div>
     </div>
     <div class="feature-card">
-        <div class="feature-icon">✅</div>
         <div class="feature-title">SVA Generator</div>
         <div class="feature-desc">Protocol-aware assertions</div>
     </div>
@@ -366,7 +362,7 @@ endmodule'''
 
 # Main tabs
 st.markdown("<br>", unsafe_allow_html=True)
-tabs = st.tabs(["🔍 RTL-Aware Generator", "📝 Protocol Templates", "📄 Spec Import", "📊 Coverage Analysis", "✅ SVA Generator"])
+tabs = st.tabs(["RTL-Aware Generator", "Protocol Templates", "Spec Import", "Coverage Analysis", "SVA Generator"])
 
 # Tab 1: RTL-Aware Generator
 with tabs[0]:
@@ -378,10 +374,10 @@ with tabs[0]:
         # Sample buttons
         c1, c2, c3 = st.columns([1, 1, 2])
         with c1:
-            if st.button("📋 APB Sample", key="sample_apb", use_container_width=True):
+            if st.button("APB Sample", key="sample_apb", use_container_width=True):
                 st.session_state['rtl_input'] = SAMPLE_APB_RTL
         with c2:
-            if st.button("📋 AXI Sample", key="sample_axi", use_container_width=True):
+            if st.button("AXI Sample", key="sample_axi", use_container_width=True):
                 st.session_state['rtl_input'] = SAMPLE_AXI_RTL
         
         rtl_code = st.text_area(
@@ -392,7 +388,7 @@ with tabs[0]:
             label_visibility="collapsed"
         )
         
-        analyze_btn = st.button("⚡ Analyze & Generate", type="primary", use_container_width=True)
+        analyze_btn = st.button("Analyze & Generate", type="primary", use_container_width=True)
     
     with col2:
         st.markdown("#### Generated Output")
@@ -410,7 +406,7 @@ with tabs[0]:
                     c2.metric("Outputs", len(parsed.outputs))
                     c3.metric("FSM", "Yes" if parsed.fsm else "No")
                     
-                    with st.expander("📊 Analysis Details", expanded=False):
+                    with st.expander("Analysis Details", expanded=False):
                         if parsed.clocks:
                             st.write(f"**Clocks:** {', '.join(parsed.clocks)}")
                         if parsed.resets:
@@ -424,14 +420,14 @@ with tabs[0]:
                     result = generate_with_llm(prompt)
                     
                     st.code(result, language="systemverilog")
-                    st.download_button("📥 Download Testbench", result, f"{parsed.module_name}_tb.sv", use_container_width=True)
+                    st.download_button("Download Testbench", result, f"{parsed.module_name}_tb.sv", use_container_width=True)
                     
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
         elif analyze_btn:
             st.warning("Please paste RTL code first")
         else:
-            st.info("👈 Paste RTL code and click Analyze to generate a UVM testbench")
+            st.info("Paste RTL code and click Analyze to generate a UVM testbench")
 
 # Tab 2: Protocol Templates
 with tabs[1]:
@@ -462,7 +458,7 @@ with tabs[1]:
             speed = st.selectbox("Speed", ["Standard (100kHz)", "Fast (400kHz)", "Fast+ (1MHz)"])
             config = {"speed": speed}
         
-        generate_btn = st.button("⚡ Generate", type="primary", use_container_width=True, key="gen_proto")
+        generate_btn = st.button("Generate", type="primary", use_container_width=True, key="gen_proto")
     
     with col2:
         st.markdown("#### Generated Testbench")
@@ -478,7 +474,7 @@ Use proper UVM methodology. Base template:
 {template}"""
                 result = generate_with_llm(prompt)
                 st.code(result, language="systemverilog")
-                st.download_button("📥 Download", result, f"{protocol.lower()}_tb.sv", use_container_width=True)
+                st.download_button("Download", result, f"{protocol.lower()}_tb.sv", use_container_width=True)
         else:
             st.info("Configure protocol parameters and click Generate")
 
@@ -503,7 +499,7 @@ with tabs[2]:
             label_visibility="collapsed"
         )
         
-        parse_btn = st.button("📄 Parse & Extract", type="primary", use_container_width=True)
+        parse_btn = st.button("Parse & Extract", type="primary", use_container_width=True)
     
     with col2:
         st.markdown("#### Extracted Requirements")
@@ -561,7 +557,7 @@ Uncovered:
             label_visibility="collapsed"
         )
         
-        analyze_btn = st.button("📊 Analyze Gaps", type="primary", use_container_width=True, key="cov_analyze")
+        analyze_btn = st.button("Analyze Gaps", type="primary", use_container_width=True, key="cov_analyze")
     
     with col2:
         st.markdown("#### Analysis Results")
@@ -583,7 +579,7 @@ Uncovered:
                     if gaps:
                         st.markdown("**Identified Gaps:**")
                         for gap in gaps:
-                            st.warning(f"⚠️ {gap}")
+                            st.warning(gap)
                     
                     # Suggestions
                     suggestions = analysis.get('suggestions', [])
@@ -592,7 +588,7 @@ Uncovered:
                         for i, s in enumerate(suggestions, 1):
                             st.info(f"{i}. {s}")
                     
-                    if st.button("🚀 Generate Tests for Gaps", use_container_width=True):
+                    if st.button("Generate Tests for Gaps", use_container_width=True):
                         prompt = f"Generate UVM sequences to cover these gaps: {gaps}"
                         result = generate_with_llm(prompt)
                         st.code(result, language="systemverilog")
@@ -616,10 +612,10 @@ with tabs[4]:
         if sva_mode == "From RTL":
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("📋 APB Sample", key="sva_apb"):
+                if st.button("APB Sample", key="sva_apb"):
                     st.session_state['sva_input'] = SAMPLE_APB_RTL
             with c2:
-                if st.button("📋 AXI Sample", key="sva_axi"):
+                if st.button("AXI Sample", key="sva_axi"):
                     st.session_state['sva_input'] = SAMPLE_AXI_RTL
             
             sva_input = st.text_area(
@@ -641,7 +637,7 @@ with tabs[4]:
                 label_visibility="collapsed"
             )
         
-        gen_btn = st.button("✅ Generate Assertions", type="primary", use_container_width=True)
+        gen_btn = st.button("Generate Assertions", type="primary", use_container_width=True)
     
     with col2:
         st.markdown("#### Generated SVA")
@@ -663,7 +659,7 @@ with tabs[4]:
                             all_code.append(f"// {a['name']}\n{a['code']}")
                         
                         combined = "\n\n".join(all_code)
-                        st.download_button("📥 Download All", combined, f"{parsed.module_name}_sva.sv", use_container_width=True)
+                        st.download_button("Download All", combined, f"{parsed.module_name}_sva.sv", use_container_width=True)
                     else:
                         prompt = f"""Generate SVA assertions for:
 {sva_input}
@@ -671,7 +667,7 @@ with tabs[4]:
 For each, provide property name, SVA code with ##, |=>, throughout syntax, and assert/cover directives."""
                         result = generate_with_llm(prompt)
                         st.code(result, language="systemverilog")
-                        st.download_button("📥 Download", result, "assertions.sv", use_container_width=True)
+                        st.download_button("Download", result, "assertions.sv", use_container_width=True)
                         
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
