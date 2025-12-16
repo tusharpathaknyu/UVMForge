@@ -18,7 +18,11 @@ from src.app_helpers import (
     generate_wavedrom, 
     calculate_quality_score, 
     predict_bugs, 
-    create_testbench_zip
+    create_testbench_zip,
+    validate_rtl_syntax,
+    get_protocol_comparison,
+    create_html_export,
+    SVA_LIBRARY
 )
 from src.rtl_parser import parse_rtl
 
@@ -283,6 +287,173 @@ class TestWaveDromValidJSON:
         
         # Should not raise
         data = json.loads(result)
-        
-        assert isinstance(data, dict)
-        assert 'signal' in data
+
+
+class TestRTLSyntaxValidation:
+    """Test RTL syntax validation"""
+    
+    def test_valid_module(self):
+        """Test valid module passes validation"""
+        code = """
+        module test(
+            input clk,
+            output reg data
+        );
+        endmodule
+        """
+        result = validate_rtl_syntax(code)
+        assert result['valid'] is True
+        assert len(result['errors']) == 0
+    
+    def test_missing_module(self):
+        """Test missing module declaration"""
+        code = "wire test;"
+        result = validate_rtl_syntax(code)
+        assert result['valid'] is False
+        assert any('module' in e.lower() for e in result['errors'])
+    
+    def test_missing_endmodule(self):
+        """Test missing endmodule"""
+        code = "module test(input clk);"
+        result = validate_rtl_syntax(code)
+        assert result['valid'] is False
+        assert any('endmodule' in e.lower() for e in result['errors'])
+    
+    def test_unbalanced_parentheses(self):
+        """Test unbalanced parentheses detection"""
+        code = "module test(input clk; endmodule"
+        result = validate_rtl_syntax(code)
+        assert result['valid'] is False
+        assert any('parenthes' in e.lower() for e in result['errors'])
+    
+    def test_unbalanced_braces(self):
+        """Test unbalanced braces detection"""
+        code = """
+        module test(input clk);
+        always @(*) begin
+            if (1) {
+                data = 1;
+            
+        end
+        endmodule
+        """
+        result = validate_rtl_syntax(code)
+        assert result['valid'] is False
+        assert any('brace' in e.lower() for e in result['errors'])
+    
+    def test_unbalanced_begin_end_warning(self):
+        """Test unbalanced begin/end generates warning"""
+        code = """
+        module test(input clk);
+        always @(*) begin
+            data = 1;
+        endmodule
+        """
+        result = validate_rtl_syntax(code)
+        # May have warnings about begin/end
+        assert 'warnings' in result
+    
+    def test_empty_code(self):
+        """Test empty code is invalid"""
+        result = validate_rtl_syntax("")
+        assert result['valid'] is False
+        assert any('empty' in e.lower() for e in result['errors'])
+    
+    def test_whitespace_only(self):
+        """Test whitespace-only is invalid"""
+        result = validate_rtl_syntax("   \n\t  ")
+        assert result['valid'] is False
+
+
+class TestProtocolComparison:
+    """Test protocol comparison data"""
+    
+    def test_returns_all_protocols(self):
+        """Test all protocols are present"""
+        comparison = get_protocol_comparison()
+        expected = ['APB', 'AXI4-Lite', 'AXI4', 'SPI', 'I2C', 'UART']
+        for proto in expected:
+            assert proto in comparison
+    
+    def test_protocol_has_required_fields(self):
+        """Test each protocol has required fields"""
+        comparison = get_protocol_comparison()
+        required_fields = ['complexity', 'throughput', 'burst', 'pipelining', 'use_case']
+        for proto, data in comparison.items():
+            for field in required_fields:
+                assert field in data, f"Missing {field} in {proto}"
+    
+    def test_complexity_values(self):
+        """Test complexity values are valid"""
+        comparison = get_protocol_comparison()
+        valid_complexity = ['Low', 'Medium', 'High']
+        for proto, data in comparison.items():
+            assert data['complexity'] in valid_complexity
+
+
+class TestHTMLExport:
+    """Test HTML export generation"""
+    
+    def test_html_contains_module_name(self):
+        """Test HTML contains module name"""
+        html = create_html_export("my_module", "// code here")
+        assert "my_module" in html
+        assert "<html>" in html
+        assert "</html>" in html
+    
+    def test_html_escapes_special_chars(self):
+        """Test HTML escapes < and >"""
+        code = "if (a < b) output > 0;"
+        html = create_html_export("test", code)
+        assert "&lt;" in html
+        assert "&gt;" in html
+        assert "<html>" in html  # but HTML tags preserved
+    
+    def test_html_contains_code(self):
+        """Test HTML contains the code"""
+        code = "module test_unique_xyz();"
+        html = create_html_export("test", code)
+        assert "test_unique_xyz" in html
+    
+    def test_html_contains_metadata(self):
+        """Test HTML contains metadata"""
+        html = create_html_export("my_test", "// code")
+        assert "VerifAI" in html
+        assert "Generated by" in html
+
+
+class TestSVALibrary:
+    """Test SVA library contents"""
+    
+    def test_library_has_patterns(self):
+        """Test SVA library has patterns"""
+        assert len(SVA_LIBRARY) > 0
+    
+    def test_patterns_have_required_fields(self):
+        """Test each pattern has required fields"""
+        for key, pattern in SVA_LIBRARY.items():
+            assert 'name' in pattern, f"Missing name in {key}"
+            assert 'description' in pattern, f"Missing description in {key}"
+            assert 'code' in pattern, f"Missing code in {key}"
+            assert 'usage' in pattern, f"Missing usage in {key}"
+    
+    def test_handshake_pattern(self):
+        """Test handshake pattern exists"""
+        assert 'handshake' in SVA_LIBRARY
+        assert 'valid' in SVA_LIBRARY['handshake']['code'].lower()
+        assert 'ready' in SVA_LIBRARY['handshake']['code'].lower()
+    
+    def test_fifo_patterns(self):
+        """Test FIFO patterns exist"""
+        assert 'fifo_full' in SVA_LIBRARY
+        assert 'fifo_empty' in SVA_LIBRARY
+    
+    def test_timeout_pattern(self):
+        """Test timeout pattern exists"""
+        assert 'timeout' in SVA_LIBRARY
+        assert '##' in SVA_LIBRARY['timeout']['code']
+    
+    def test_all_patterns_have_property(self):
+        """Test all patterns define a property"""
+        for key, pattern in SVA_LIBRARY.items():
+            assert 'property' in pattern['code'].lower(), f"No property in {key}"

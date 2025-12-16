@@ -8,6 +8,10 @@ import os
 import io
 import zipfile
 import json
+import re
+import time
+import hashlib
+from datetime import datetime
 import google.generativeai as genai
 from src.templates import PROTOCOL_TEMPLATES
 from src.rtl_parser import parse_rtl
@@ -23,85 +27,142 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Professional clean CSS
-st.markdown("""
+# Initialize session state for new features
+if 'dark_mode' not in st.session_state:
+    st.session_state['dark_mode'] = False
+if 'generation_history' not in st.session_state:
+    st.session_state['generation_history'] = []
+if 'favorite_templates' not in st.session_state:
+    st.session_state['favorite_templates'] = []
+if 'generation_stats' not in st.session_state:
+    st.session_state['generation_stats'] = {'total': 0, 'protocols': {}, 'avg_time': 0}
+
+# Theme colors based on dark mode
+def get_theme_colors():
+    if st.session_state.get('dark_mode', False):
+        return {
+            'bg': '#0d1117',
+            'card': '#161b22',
+            'border': '#30363d',
+            'text': '#c9d1d9',
+            'text_muted': '#8b949e',
+            'primary': '#58a6ff',
+            'success': '#3fb950',
+            'warning': '#d29922',
+            'error': '#f85149'
+        }
+    return {
+        'bg': '#fafbfc',
+        'card': '#ffffff',
+        'border': '#d0d7de',
+        'text': '#24292f',
+        'text_muted': '#57606a',
+        'primary': '#0969da',
+        'success': '#2da44e',
+        'warning': '#d4a72c',
+        'error': '#cf222e'
+    }
+
+theme = get_theme_colors()
+
+# Professional clean CSS with dynamic theming
+st.markdown(f"""
 <style>
     /* Hide defaults */
-    #MainMenu, footer, header {visibility: hidden;}
-    .block-container {padding: 1.5rem 3rem 5rem; max-width: 1200px;}
+    #MainMenu, footer, header {{visibility: hidden;}}
+    .block-container {{padding: 1.5rem 3rem 5rem; max-width: 1200px;}}
     
-    /* Clean light/dark theme */
-    .stApp {
-        background: #fafbfc;
-    }
+    /* Theme-aware styling */
+    .stApp {{
+        background: {theme['bg']};
+    }}
     
     /* Navigation */
-    .nav {
+    .nav {{
         display: flex;
         justify-content: space-between;
         align-items: center;
         padding: 0.8rem 0;
-        border-bottom: 1px solid #e1e4e8;
+        border-bottom: 1px solid {theme['border']};
         margin-bottom: 2rem;
-    }
-    .logo {
+    }}
+    .logo {{
         font-size: 1.3rem;
         font-weight: 700;
-        color: #24292f;
+        color: {theme['text']};
         letter-spacing: -0.3px;
-    }
-    .logo span {
-        color: #0969da;
-    }
-    .nav-links {
+    }}
+    .logo span {{
+        color: {theme['primary']};
+    }}
+    .nav-links {{
         display: flex;
         gap: 1.5rem;
         align-items: center;
-    }
-    .nav-link {
-        color: #57606a;
+    }}
+    .nav-link {{
+        color: {theme['text_muted']};
         text-decoration: none;
         font-size: 0.9rem;
         transition: color 0.2s;
-    }
-    .nav-link:hover {
-        color: #0969da;
-    }
+    }}
+    .nav-link:hover {{
+        color: {theme['primary']};
+    }}
+    
+    /* Theme toggle button */
+    .theme-toggle {{
+        background: {theme['card']};
+        border: 1px solid {theme['border']};
+        border-radius: 20px;
+        padding: 0.4rem 0.8rem;
+        font-size: 0.8rem;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        color: {theme['text_muted']};
+        transition: all 0.2s;
+    }}
+    .theme-toggle:hover {{
+        border-color: {theme['primary']};
+        color: {theme['primary']};
+    }}
     
     /* Hero - compact */
-    .hero {
+    .hero {{
         text-align: center;
         padding: 1.5rem 0 1rem;
-    }
-    .hero h1 {
+    }}
+    .hero h1 {{
         font-size: 2rem;
         font-weight: 700;
-        color: #24292f;
+        color: {theme['text']};
         margin-bottom: 0.5rem;
-    }
-    .hero p {
-        color: #57606a;
+    }}
+    .hero p {{
+        color: {theme['text_muted']};
         font-size: 1rem;
         max-width: 500px;
         margin: 0 auto;
-    }
+    }}
     
     /* How it works */
-    .steps {
+    .steps {{
         display: flex;
         justify-content: center;
         gap: 3rem;
         margin: 1.5rem 0 2rem;
         padding: 1rem 0;
-    }
-    .step {
+    }}
+    .step {{
         text-align: center;
         max-width: 180px;
-    }
-    .step-num {
+    }}
+    .step-num {{
         width: 28px;
         height: 28px;
-        background: #0969da;
+        background: {theme['primary']};
         color: white;
         border-radius: 50%;
         display: inline-flex;
@@ -110,167 +171,168 @@ st.markdown("""
         font-size: 0.85rem;
         font-weight: 600;
         margin-bottom: 0.5rem;
-    }
-    .step-title {
+    }}
+    .step-title {{
         font-weight: 600;
-        color: #24292f;
+        color: {theme['text']};
         font-size: 0.9rem;
         margin-bottom: 0.25rem;
-    }
-    .step-desc {
-        color: #57606a;
+    }}
+    .step-desc {{
+        color: {theme['text_muted']};
         font-size: 0.8rem;
-    }
+    }}
     
     /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        background: white;
-        border: 1px solid #d0d7de;
+    .stTabs [data-baseweb="tab-list"] {{
+        background: {theme['card']};
+        border: 1px solid {theme['border']};
         border-radius: 8px;
         padding: 4px;
         gap: 4px;
-    }
-    .stTabs [data-baseweb="tab"] {
+    }}
+    .stTabs [data-baseweb="tab"] {{
         background: transparent;
-        color: #57606a;
+        color: {theme['text_muted']};
         padding: 0.6rem 1.2rem;
         font-size: 0.9rem;
         border-radius: 6px;
         font-weight: 500;
-    }
-    .stTabs [aria-selected="true"] {
-        background: #0969da !important;
+    }}
+    .stTabs [aria-selected="true"] {{
+        background: {theme['primary']} !important;
         color: white !important;
-    }
-    .stTabs [data-baseweb="tab"]:hover {
-        background: #f6f8fa;
-    }
+    }}
+    .stTabs [data-baseweb="tab"]:hover {{
+        background: {theme['bg']};
+    }}
     
     /* Cards */
-    .card {
-        background: white;
-        border: 1px solid #d0d7de;
+    .card {{
+        background: {theme['card']};
+        border: 1px solid {theme['border']};
         border-radius: 8px;
         padding: 1.25rem;
-    }
-    .card-title {
+    }}
+    .card-title {{
         font-weight: 600;
-        color: #24292f;
+        color: {theme['text']};
         font-size: 0.95rem;
         margin-bottom: 1rem;
         padding-bottom: 0.5rem;
-        border-bottom: 1px solid #e1e4e8;
-    }
+        border-bottom: 1px solid {theme['border']};
+    }}
     
     /* Text area */
-    .stTextArea textarea {
-        background: white !important;
-        border: 1px solid #d0d7de !important;
+    .stTextArea textarea {{
+        background: {theme['card']} !important;
+        border: 1px solid {theme['border']} !important;
         border-radius: 8px !important;
-        color: #24292f !important;
+        color: {theme['text']} !important;
         font-family: 'SF Mono', 'Monaco', monospace !important;
         font-size: 0.85rem !important;
-    }
-    .stTextArea textarea:focus {
-        border-color: #0969da !important;
+    }}
+    .stTextArea textarea:focus {{
+        border-color: {theme['primary']} !important;
         box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.1) !important;
-    }
+    }}
     
     /* Buttons */
-    .stButton > button {
-        background: #0969da !important;
+    .stButton > button {{
+        background: {theme['primary']} !important;
         color: white !important;
         border: none !important;
         border-radius: 6px !important;
         padding: 0.6rem 1.5rem !important;
         font-weight: 600 !important;
         font-size: 0.9rem !important;
-        transition: background 0.2s !important;
-    }
-    .stButton > button:hover {
-        background: #0860ca !important;
-    }
+        transition: all 0.2s !important;
+    }}
+    .stButton > button:hover {{
+        filter: brightness(0.9) !important;
+        transform: translateY(-1px);
+    }}
     
     /* Secondary buttons */
-    div[data-testid="column"] .stButton > button {
-        background: #f6f8fa !important;
-        color: #24292f !important;
-        border: 1px solid #d0d7de !important;
+    div[data-testid="column"] .stButton > button {{
+        background: {theme['bg']} !important;
+        color: {theme['text']} !important;
+        border: 1px solid {theme['border']} !important;
         padding: 0.4rem 0.8rem !important;
         font-size: 0.8rem !important;
         font-weight: 500 !important;
-    }
-    div[data-testid="column"] .stButton > button:hover {
-        background: #f3f4f6 !important;
-        border-color: #0969da !important;
-    }
+    }}
+    div[data-testid="column"] .stButton > button:hover {{
+        background: {theme['card']} !important;
+        border-color: {theme['primary']} !important;
+    }}
     
     /* Download button */
-    .stDownloadButton > button {
-        background: #2da44e !important;
+    .stDownloadButton > button {{
+        background: {theme['success']} !important;
         color: white !important;
         border: none !important;
-    }
-    .stDownloadButton > button:hover {
-        background: #2c974b !important;
-    }
+    }}
+    .stDownloadButton > button:hover {{
+        filter: brightness(0.9) !important;
+    }}
     
     /* Code blocks */
-    pre {
-        background: #f6f8fa !important;
-        border: 1px solid #d0d7de !important;
+    pre {{
+        background: {theme['bg']} !important;
+        border: 1px solid {theme['border']} !important;
         border-radius: 8px !important;
-    }
+    }}
     
     /* Metrics */
-    [data-testid="stMetricValue"] {
-        color: #0969da;
+    [data-testid="stMetricValue"] {{
+        color: {theme['primary']};
         font-size: 1.5rem !important;
-    }
-    [data-testid="stMetricLabel"] {
-        color: #57606a;
-    }
+    }}
+    [data-testid="stMetricLabel"] {{
+        color: {theme['text_muted']};
+    }}
     
     /* Selectbox */
-    .stSelectbox > div > div {
-        background: white !important;
-        border: 1px solid #d0d7de !important;
+    .stSelectbox > div > div {{
+        background: {theme['card']} !important;
+        border: 1px solid {theme['border']} !important;
         border-radius: 6px !important;
-    }
+    }}
     
     /* Slider */
-    .stSlider > div > div > div {
-        background: #0969da !important;
-    }
+    .stSlider > div > div > div {{
+        background: {theme['primary']} !important;
+    }}
     
-    /* Success/warning */
-    .stSuccess {
-        background: #dafbe1 !important;
-        border: 1px solid #82e596 !important;
-        color: #1a7f37 !important;
+    /* Alerts */
+    .stSuccess {{
+        background: {theme['success']}20 !important;
+        border: 1px solid {theme['success']}80 !important;
+        color: {theme['success']} !important;
         border-radius: 6px !important;
-    }
-    .stWarning {
-        background: #fff8c5 !important;
-        border: 1px solid #d4a72c !important;
-        color: #9a6700 !important;
+    }}
+    .stWarning {{
+        background: {theme['warning']}20 !important;
+        border: 1px solid {theme['warning']}80 !important;
+        color: {theme['warning']} !important;
         border-radius: 6px !important;
-    }
-    .stInfo {
-        background: #ddf4ff !important;
-        border: 1px solid #54aeff !important;
-        color: #0969da !important;
+    }}
+    .stInfo {{
+        background: {theme['primary']}20 !important;
+        border: 1px solid {theme['primary']}80 !important;
+        color: {theme['primary']} !important;
         border-radius: 6px !important;
-    }
-    .stError {
-        background: #ffebe9 !important;
-        border: 1px solid #ff8182 !important;
-        color: #cf222e !important;
+    }}
+    .stError {{
+        background: {theme['error']}20 !important;
+        border: 1px solid {theme['error']}80 !important;
+        color: {theme['error']} !important;
         border-radius: 6px !important;
-    }
+    }}
     
     /* Footer */
-    .footer {
+    .footer {{
         position: fixed;
         bottom: 0;
         left: 0;
@@ -280,66 +342,66 @@ st.markdown("""
         justify-content: space-between;
         align-items: center;
         font-size: 0.8rem;
-        background: white;
-        border-top: 1px solid #e1e4e8;
-    }
-    .footer a {
-        color: #0969da;
+        background: {theme['card']};
+        border-top: 1px solid {theme['border']};
+    }}
+    .footer a {{
+        color: {theme['primary']};
         text-decoration: none;
-    }
-    .footer a:hover {
+    }}
+    .footer a:hover {{
         text-decoration: underline;
-    }
+    }}
     
     /* Placeholder */
-    .placeholder {
-        background: #f6f8fa;
-        border: 1px dashed #d0d7de;
+    .placeholder {{
+        background: {theme['bg']};
+        border: 1px dashed {theme['border']};
         border-radius: 8px;
         padding: 2rem;
         text-align: center;
-        color: #57606a;
-    }
+        color: {theme['text_muted']};
+    }}
     
     /* Analysis badge */
-    .badge {
+    .badge {{
         display: inline-block;
-        background: #ddf4ff;
-        color: #0969da;
+        background: {theme['primary']}20;
+        color: {theme['primary']};
         padding: 0.2rem 0.6rem;
         border-radius: 12px;
         font-size: 0.75rem;
         font-weight: 500;
         margin-left: 0.5rem;
-    }
-    .badge-success {
-        background: #dafbe1;
-        color: #1a7f37;
-    }
+    }}
+    .badge-success {{
+        background: {theme['success']}20;
+        color: {theme['success']};
+    }}
     
     /* Features bar */
-    .features-bar {
+    .features-bar {{
         display: flex;
         justify-content: center;
         flex-wrap: wrap;
         gap: 0.5rem;
         margin-bottom: 1.5rem;
         padding: 0.75rem;
-        background: white;
-        border: 1px solid #d0d7de;
+        background: {theme['card']};
+        border: 1px solid {theme['border']};
         border-radius: 8px;
-    }
-    .feature-item {
-        background: #f6f8fa;
-        color: #57606a;
+    }}
+    .feature-item {{
+        background: {theme['bg']};
+        color: {theme['text_muted']};
         padding: 0.3rem 0.7rem;
         border-radius: 4px;
         font-size: 0.75rem;
         font-weight: 500;
-    }
+    }}
     
     /* Waveform diagram styling */
-    .waveform-container {
+    .waveform-container {{
         background: #1e1e1e;
         color: #00ff00;
         font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
@@ -350,64 +412,64 @@ st.markdown("""
         overflow-x: auto;
         white-space: pre;
         border: 1px solid #333;
-    }
-    .waveform-title {
+    }}
+    .waveform-title {{
         color: #00ff00;
         font-weight: bold;
         margin-bottom: 0.5rem;
-    }
+    }}
     
     /* Constraint code styling */
-    .constraint-box {
-        background: #f6f8fa;
-        border: 1px solid #d0d7de;
+    .constraint-box {{
+        background: {theme['bg']};
+        border: 1px solid {theme['border']};
         border-radius: 6px;
         padding: 0.75rem;
         margin-bottom: 0.5rem;
-    }
-    .constraint-title {
+    }}
+    .constraint-title {{
         font-weight: 600;
-        color: #24292f;
+        color: {theme['text']};
         font-size: 0.85rem;
         margin-bottom: 0.25rem;
-    }
-    .constraint-desc {
-        color: #57606a;
+    }}
+    .constraint-desc {{
+        color: {theme['text_muted']};
         font-size: 0.75rem;
         margin-bottom: 0.5rem;
-    }
+    }}
     
     /* Mobile responsiveness */
-    @media (max-width: 768px) {
-        .block-container {
+    @media (max-width: 768px) {{
+        .block-container {{
             padding: 1rem !important;
-        }
-        .steps {
+        }}
+        .steps {{
             flex-direction: column;
             gap: 1rem;
-        }
-        .hero h1 {
+        }}
+        .hero h1 {{
             font-size: 1.5rem;
-        }
-        .footer {
+        }}
+        .footer {{
             padding: 0.8rem 1rem;
             font-size: 0.75rem;
-        }
-    }
+        }}
+    }}
     
     /* Expander */
-    .streamlit-expanderHeader {
-        background: #f6f8fa !important;
+    .streamlit-expanderHeader {{
+        background: {theme['bg']} !important;
         border-radius: 6px !important;
         font-weight: 500;
-    }
+    }}
     
     /* Quality Score Gauge */
-    .quality-gauge {
+    .quality-gauge {{
         text-align: center;
         padding: 1rem;
-    }
-    .score-circle {
+    }}
+    .score-circle {{
         width: 80px;
         height: 80px;
         border-radius: 50%;
@@ -418,66 +480,377 @@ st.markdown("""
         font-weight: 700;
         color: white;
         margin-bottom: 0.5rem;
-    }
-    .score-high { background: linear-gradient(135deg, #2da44e, #1a7f37); }
-    .score-medium { background: linear-gradient(135deg, #d4a72c, #9a6700); }
-    .score-low { background: linear-gradient(135deg, #cf222e, #a40e26); }
+    }}
+    .score-high {{ background: linear-gradient(135deg, {theme['success']}, #1a7f37); }}
+    .score-medium {{ background: linear-gradient(135deg, {theme['warning']}, #9a6700); }}
+    .score-low {{ background: linear-gradient(135deg, {theme['error']}, #a40e26); }}
     
     /* Bug prediction card */
-    .bug-card {
-        background: #fff8c5;
-        border: 1px solid #d4a72c;
+    .bug-card {{
+        background: {theme['warning']}20;
+        border: 1px solid {theme['warning']}80;
         border-radius: 8px;
         padding: 0.75rem 1rem;
         margin-bottom: 0.5rem;
-    }
-    .bug-card-high {
-        background: #ffebe9;
-        border-color: #ff8182;
-    }
-    .bug-title {
+    }}
+    .bug-card-high {{
+        background: {theme['error']}20;
+        border-color: {theme['error']}80;
+    }}
+    .bug-title {{
         font-weight: 600;
-        color: #9a6700;
+        color: {theme['warning']};
         font-size: 0.85rem;
-    }
-    .bug-card-high .bug-title {
-        color: #cf222e;
-    }
-    .bug-desc {
-        color: #57606a;
+    }}
+    .bug-card-high .bug-title {{
+        color: {theme['error']};
+    }}
+    .bug-desc {{
+        color: {theme['text_muted']};
         font-size: 0.8rem;
         margin-top: 0.25rem;
-    }
+    }}
     
     /* Stats grid */
-    .stats-grid {
+    .stats-grid {{
         display: grid;
         grid-template-columns: repeat(4, 1fr);
         gap: 0.75rem;
         margin-bottom: 1rem;
-    }
-    .stat-box {
-        background: white;
-        border: 1px solid #d0d7de;
+    }}
+    .stat-box {{
+        background: {theme['card']};
+        border: 1px solid {theme['border']};
         border-radius: 8px;
         padding: 0.75rem;
         text-align: center;
-    }
-    .stat-value {
+    }}
+    .stat-value {{
         font-size: 1.25rem;
         font-weight: 700;
-        color: #0969da;
-    }
-    .stat-label {
+        color: {theme['primary']};
+    }}
+    .stat-label {{
         font-size: 0.7rem;
-        color: #57606a;
+        color: {theme['text_muted']};
         text-transform: uppercase;
         letter-spacing: 0.5px;
-    }
+    }}
+    
+    /* Copy button */
+    .copy-btn {{
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        background: {theme['bg']};
+        border: 1px solid {theme['border']};
+        border-radius: 4px;
+        padding: 0.3rem 0.6rem;
+        font-size: 0.75rem;
+        cursor: pointer;
+        color: {theme['text_muted']};
+        transition: all 0.2s;
+    }}
+    .copy-btn:hover {{
+        background: {theme['card']};
+        color: {theme['primary']};
+        border-color: {theme['primary']};
+    }}
+    
+    /* History item */
+    .history-item {{
+        background: {theme['card']};
+        border: 1px solid {theme['border']};
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: all 0.2s;
+    }}
+    .history-item:hover {{
+        border-color: {theme['primary']};
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }}
+    .history-name {{
+        font-weight: 600;
+        color: {theme['text']};
+        font-size: 0.9rem;
+    }}
+    .history-meta {{
+        color: {theme['text_muted']};
+        font-size: 0.75rem;
+        margin-top: 0.2rem;
+    }}
+    .history-time {{
+        color: {theme['text_muted']};
+        font-size: 0.75rem;
+    }}
+    
+    /* Protocol comparison table */
+    .proto-table {{
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+    }}
+    .proto-table th, .proto-table td {{
+        padding: 0.6rem;
+        text-align: left;
+        border-bottom: 1px solid {theme['border']};
+    }}
+    .proto-table th {{
+        background: {theme['bg']};
+        font-weight: 600;
+        color: {theme['text']};
+    }}
+    .proto-table td {{
+        color: {theme['text_muted']};
+    }}
+    .proto-check {{ color: {theme['success']}; }}
+    .proto-x {{ color: {theme['error']}; }}
+    
+    /* Keyboard shortcuts */
+    .kbd {{
+        display: inline-block;
+        background: {theme['bg']};
+        border: 1px solid {theme['border']};
+        border-radius: 4px;
+        padding: 0.1rem 0.4rem;
+        font-size: 0.75rem;
+        font-family: monospace;
+        color: {theme['text_muted']};
+    }}
+    
+    /* Syntax validation indicator */
+    .syntax-valid {{
+        color: {theme['success']};
+        font-size: 0.8rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+    }}
+    .syntax-invalid {{
+        color: {theme['error']};
+        font-size: 0.8rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+    }}
+    
+    /* Performance metrics bar */
+    .perf-bar {{
+        display: flex;
+        gap: 1rem;
+        padding: 0.5rem 1rem;
+        background: {theme['card']};
+        border: 1px solid {theme['border']};
+        border-radius: 6px;
+        margin-top: 1rem;
+        font-size: 0.8rem;
+    }}
+    .perf-item {{
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+        color: {theme['text_muted']};
+    }}
+    .perf-value {{
+        font-weight: 600;
+        color: {theme['primary']};
+    }}
 </style>
 """, unsafe_allow_html=True)
 
 # ============== HELPER FUNCTIONS ==============
+
+def validate_rtl_syntax(code: str) -> dict:
+    """Basic RTL syntax validation"""
+    errors = []
+    warnings = []
+    
+    if not code.strip():
+        return {'valid': False, 'errors': ['Empty code'], 'warnings': []}
+    
+    # Check for module declaration
+    if not re.search(r'\bmodule\s+\w+', code):
+        errors.append("Missing module declaration")
+    
+    # Check for endmodule
+    if 'module' in code.lower() and 'endmodule' not in code.lower():
+        errors.append("Missing 'endmodule' keyword")
+    
+    # Check balanced parentheses
+    if code.count('(') != code.count(')'):
+        errors.append("Unbalanced parentheses")
+    
+    # Check balanced braces
+    if code.count('{') != code.count('}'):
+        errors.append("Unbalanced braces")
+    
+    # Check balanced begin/end
+    begin_count = len(re.findall(r'\bbegin\b', code))
+    end_count = len(re.findall(r'\bend\b', code))
+    if begin_count != end_count:
+        warnings.append(f"Possible unbalanced begin/end ({begin_count} begin, {end_count} end)")
+    
+    # Check for common typos
+    if re.search(r'\bwire\s+reg\b|\breg\s+wire\b', code):
+        errors.append("Invalid signal type combination")
+    
+    return {
+        'valid': len(errors) == 0,
+        'errors': errors,
+        'warnings': warnings
+    }
+
+def add_to_history(name: str, protocol: str, code: str, generation_time: float):
+    """Add generation to history"""
+    history_item = {
+        'id': hashlib.md5(f"{name}{datetime.now()}".encode()).hexdigest()[:8],
+        'name': name,
+        'protocol': protocol,
+        'code': code,
+        'timestamp': datetime.now().isoformat(),
+        'time_display': datetime.now().strftime("%I:%M %p"),
+        'generation_time': round(generation_time, 2)
+    }
+    
+    # Keep only last 10 items
+    history = st.session_state.get('generation_history', [])
+    history.insert(0, history_item)
+    st.session_state['generation_history'] = history[:10]
+    
+    # Update stats
+    stats = st.session_state.get('generation_stats', {'total': 0, 'protocols': {}, 'avg_time': 0})
+    stats['total'] += 1
+    stats['protocols'][protocol] = stats['protocols'].get(protocol, 0) + 1
+    total_time = stats['avg_time'] * (stats['total'] - 1) + generation_time
+    stats['avg_time'] = total_time / stats['total']
+    st.session_state['generation_stats'] = stats
+
+def get_protocol_comparison():
+    """Return protocol comparison data"""
+    return {
+        'APB': {'complexity': 'Low', 'throughput': 'Low', 'burst': '❌', 'pipelining': '❌', 'use_case': 'Config registers'},
+        'AXI4-Lite': {'complexity': 'Medium', 'throughput': 'Medium', 'burst': '❌', 'pipelining': '✅', 'use_case': 'Memory-mapped I/O'},
+        'AXI4': {'complexity': 'High', 'throughput': 'High', 'burst': '✅', 'pipelining': '✅', 'use_case': 'High-bandwidth'},
+        'SPI': {'complexity': 'Low', 'throughput': 'Low', 'burst': '❌', 'pipelining': '❌', 'use_case': 'Serial peripherals'},
+        'I2C': {'complexity': 'Medium', 'throughput': 'Low', 'burst': '❌', 'pipelining': '❌', 'use_case': 'Low-speed devices'},
+        'UART': {'complexity': 'Low', 'throughput': 'Low', 'burst': '❌', 'pipelining': '❌', 'use_case': 'Debug/console'},
+    }
+
+def render_copy_button(text: str, key: str) -> None:
+    """Render a copy-to-clipboard button using JavaScript"""
+    escaped_text = text.replace('`', '\\`').replace('$', '\\$')
+    html = f'''
+    <button onclick="navigator.clipboard.writeText(`{escaped_text}`).then(() => {{ 
+        this.innerHTML = '✓ Copied!'; 
+        setTimeout(() => this.innerHTML = '📋 Copy', 2000);
+    }})" class="copy-btn">📋 Copy</button>
+    '''
+    components.html(html, height=35)
+
+def create_html_export(module_name: str, code: str, parsed) -> str:
+    """Create HTML export of testbench"""
+    html = f'''<!DOCTYPE html>
+<html>
+<head>
+    <title>{module_name} UVM Testbench - VerifAI</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 2rem; background: #f6f8fa; }}
+        .container {{ max-width: 1000px; margin: 0 auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
+        h1 {{ color: #24292f; border-bottom: 2px solid #0969da; padding-bottom: 0.5rem; }}
+        .meta {{ color: #57606a; margin-bottom: 1rem; }}
+        pre {{ background: #f6f8fa; padding: 1rem; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; border: 1px solid #d0d7de; }}
+        .badge {{ display: inline-block; background: #ddf4ff; color: #0969da; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.8rem; margin-right: 0.5rem; }}
+        .footer {{ margin-top: 2rem; color: #57606a; font-size: 0.85rem; border-top: 1px solid #e1e4e8; padding-top: 1rem; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{module_name} UVM Testbench</h1>
+        <div class="meta">
+            <span class="badge">Generated by VerifAI</span>
+            <span class="badge">{datetime.now().strftime("%Y-%m-%d %H:%M")}</span>
+        </div>
+        <pre><code>{code.replace("<", "&lt;").replace(">", "&gt;")}</code></pre>
+        <div class="footer">
+            Generated by <a href="https://verifai-761803298484.us-central1.run.app">VerifAI</a> - UVM Testbench Generator
+        </div>
+    </div>
+</body>
+</html>'''
+    return html
+
+# Common SVA assertion patterns library
+SVA_LIBRARY = {
+    'handshake': {
+        'name': 'Valid-Ready Handshake',
+        'description': 'Ensures proper valid/ready protocol',
+        'code': '''property valid_ready_handshake(valid, ready, clk);
+    @(posedge clk) valid |-> ##[0:$] ready;
+endproperty''',
+        'usage': 'AXI, custom interfaces'
+    },
+    'no_x_outputs': {
+        'name': 'No X on Outputs',
+        'description': 'Outputs should never be X after reset',
+        'code': '''property no_x_after_reset(sig, rst_n, clk);
+    @(posedge clk) $rose(rst_n) |-> ##1 !$isunknown(sig);
+endproperty''',
+        'usage': 'All designs'
+    },
+    'stable_until_ack': {
+        'name': 'Stable Until Acknowledge',
+        'description': 'Signal must remain stable until acknowledged',
+        'code': '''property stable_until_ack(sig, ack, clk);
+    @(posedge clk) $changed(sig) |-> ##[1:$] ack;
+endproperty''',
+        'usage': 'Request/grant protocols'
+    },
+    'one_hot': {
+        'name': 'One-Hot Check',
+        'description': 'Verifies signal is one-hot encoded',
+        'code': '''property is_one_hot(sig, clk);
+    @(posedge clk) $onehot(sig);
+endproperty''',
+        'usage': 'FSM states, arbitration'
+    },
+    'fifo_full': {
+        'name': 'FIFO Full Protection',
+        'description': 'No writes when FIFO is full',
+        'code': '''property no_write_when_full(wr_en, full, clk);
+    @(posedge clk) full |-> !wr_en;
+endproperty''',
+        'usage': 'FIFO interfaces'
+    },
+    'fifo_empty': {
+        'name': 'FIFO Empty Protection',
+        'description': 'No reads when FIFO is empty',
+        'code': '''property no_read_when_empty(rd_en, empty, clk);
+    @(posedge clk) empty |-> !rd_en;
+endproperty''',
+        'usage': 'FIFO interfaces'
+    },
+    'timeout': {
+        'name': 'Response Timeout',
+        'description': 'Response must come within N cycles',
+        'code': '''property response_timeout(req, ack, clk);
+    @(posedge clk) req |-> ##[1:16] ack;
+endproperty''',
+        'usage': 'Bus protocols'
+    },
+    'reset_values': {
+        'name': 'Reset Value Check',
+        'description': 'Verify outputs reset to correct values',
+        'code': '''property reset_value_check(sig, rst_n, expected, clk);
+    @(posedge clk) !rst_n |-> sig == expected;
+endproperty''',
+        'usage': 'All designs'
+    }
+}
 
 def generate_wavedrom(protocol: str) -> str:
     """Generate WaveDrom JSON for protocol timing diagrams"""
@@ -803,16 +1176,38 @@ make -f Makefile.questa run
     zip_buffer.seek(0)
     return zip_buffer.getvalue()
 
-# Navigation
-st.markdown("""
-<div class="nav">
-    <div class="logo">Verif<span>AI</span></div>
-    <div class="nav-links">
-        <a href="#" class="nav-link">Documentation</a>
-        <a href="https://github.com/tusharpathaknyu/VerifAI" target="_blank" class="nav-link">GitHub</a>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+# Navigation with dark mode toggle
+nav_col1, nav_col2, nav_col3 = st.columns([2, 6, 2])
+with nav_col1:
+    st.markdown(f"""<div class="logo">Verif<span>AI</span></div>""", unsafe_allow_html=True)
+with nav_col3:
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("🌙" if not st.session_state.get('dark_mode') else "☀️", key="theme_toggle", help="Toggle dark/light mode"):
+            st.session_state['dark_mode'] = not st.session_state.get('dark_mode', False)
+            st.rerun()
+    with col_b:
+        if st.button("📜", key="history_btn", help="View generation history"):
+            st.session_state['show_history'] = not st.session_state.get('show_history', False)
+
+# Show history panel if toggled
+if st.session_state.get('show_history', False):
+    with st.expander("📜 Generation History", expanded=True):
+        history = st.session_state.get('generation_history', [])
+        if history:
+            for item in history:
+                col1, col2, col3 = st.columns([3, 1, 1])
+                with col1:
+                    st.markdown(f"**{item['name']}** - {item['protocol']}")
+                with col2:
+                    st.caption(item['time_display'])
+                with col3:
+                    if st.button("Load", key=f"load_{item['id']}"):
+                        st.session_state['tb_result'] = item['code']
+                        st.session_state['show_history'] = False
+                        st.rerun()
+        else:
+            st.info("No generation history yet. Generate a testbench to see it here!")
 
 # Hero
 st.markdown("""
@@ -1004,18 +1399,52 @@ with tabs[0]:
             label_visibility="collapsed"
         )
         
+        # Real-time syntax validation
+        if rtl_code.strip():
+            validation = validate_rtl_syntax(rtl_code)
+            if validation['valid']:
+                st.markdown('<div class="syntax-valid">✅ Syntax looks valid</div>', unsafe_allow_html=True)
+            else:
+                for err in validation['errors']:
+                    st.markdown(f'<div class="syntax-invalid">❌ {err}</div>', unsafe_allow_html=True)
+        
+        # Keyboard shortcut hint
+        st.markdown('<small style="color: #57606a;">💡 Tip: Paste RTL and click Generate or use <span class="kbd">Cmd+Enter</span></small>', unsafe_allow_html=True)
+        
         if st.button("Generate Testbench", type="primary", use_container_width=True, key="gen_tb"):
             if rtl_code.strip():
+                # Validate syntax first
+                validation = validate_rtl_syntax(rtl_code)
+                if not validation['valid']:
+                    for err in validation['errors']:
+                        st.error(f"⚠️ {err}")
+                    st.stop()
+                
+                if validation['warnings']:
+                    for warn in validation['warnings']:
+                        st.warning(f"⚡ {warn}")
+                
                 with st.spinner("Analyzing RTL and generating testbench..."):
                     try:
+                        start_time = time.time()
                         parsed = parse_rtl(rtl_code)
                         st.session_state['parsed'] = parsed
                         
                         generator = RTLAwareGenerator()
                         prompt = generator.generate_prompt(parsed)
                         result = generate_with_llm(prompt)
+                        
+                        generation_time = time.time() - start_time
                         st.session_state['tb_result'] = result
                         st.session_state['gen_success'] = True
+                        st.session_state['generation_time'] = generation_time
+                        
+                        # Add to history
+                        protocol = "generic"
+                        if hasattr(parsed, 'complexity') and parsed.complexity:
+                            protocol = parsed.complexity.detected_protocol
+                        add_to_history(parsed.module_name, protocol, result, generation_time)
+                        
                     except Exception as e:
                         st.session_state['gen_error'] = str(e)
                         st.session_state['gen_success'] = False
@@ -1145,11 +1574,21 @@ with tabs[0]:
                 
                 st.code(st.session_state['tb_result'], language="systemverilog")
                 
-                # Download options
-                c1, c2, c3 = st.columns(3)
+                # Performance metrics
+                if st.session_state.get('generation_time'):
+                    gen_time = st.session_state['generation_time']
+                    lines = len(st.session_state['tb_result'].split('\n'))
+                    st.markdown(f'''<div class="perf-bar">
+                        <div class="perf-item">⏱️ Generated in <span class="perf-value">{gen_time:.1f}s</span></div>
+                        <div class="perf-item">📝 <span class="perf-value">{lines}</span> lines</div>
+                        <div class="perf-item">📊 <span class="perf-value">{score}/100</span> quality</div>
+                    </div>''', unsafe_allow_html=True)
+                
+                # Download options - expanded
+                c1, c2, c3, c4 = st.columns(4)
                 with c1:
                     st.download_button(
-                        "📄 Download .sv",
+                        "📄 .sv",
                         st.session_state['tb_result'],
                         f"{parsed.module_name}_tb.sv",
                         use_container_width=True
@@ -1158,10 +1597,37 @@ with tabs[0]:
                     # ZIP with simulator scripts
                     zip_data = create_testbench_zip(parsed.module_name, st.session_state['tb_result'], parsed)
                     st.download_button(
-                        "📦 Download ZIP",
+                        "📦 ZIP",
                         zip_data,
                         f"{parsed.module_name}_uvm_tb.zip",
                         mime="application/zip",
+                        use_container_width=True
+                    )
+                with c3:
+                    # HTML export
+                    html_data = create_html_export(parsed.module_name, st.session_state['tb_result'], parsed)
+                    st.download_button(
+                        "🌐 HTML",
+                        html_data,
+                        f"{parsed.module_name}_tb.html",
+                        mime="text/html",
+                        use_container_width=True
+                    )
+                with c4:
+                    # JSON metadata
+                    json_data = json.dumps({
+                        'module': parsed.module_name,
+                        'protocol': parsed.complexity.detected_protocol if hasattr(parsed, 'complexity') and parsed.complexity else 'generic',
+                        'inputs': parsed.inputs,
+                        'outputs': parsed.outputs,
+                        'quality_score': score,
+                        'generated_at': datetime.now().isoformat()
+                    }, indent=2)
+                    st.download_button(
+                        "📋 JSON",
+                        json_data,
+                        f"{parsed.module_name}_meta.json",
+                        mime="application/json",
                         use_container_width=True
                     )
         
@@ -1196,6 +1662,20 @@ with tabs[1]:
     
     with col1:
         st.markdown('<div class="card-title">Protocol Configuration</div>', unsafe_allow_html=True)
+        
+        # Protocol comparison table
+        with st.expander("📊 Protocol Comparison Guide", expanded=False):
+            comparison = get_protocol_comparison()
+            st.markdown('''<table class="proto-table">
+                <tr><th>Protocol</th><th>Complexity</th><th>Throughput</th><th>Burst</th><th>Pipeline</th><th>Use Case</th></tr>
+            ''' + ''.join([f'''<tr>
+                <td><strong>{p}</strong></td>
+                <td>{d['complexity']}</td>
+                <td>{d['throughput']}</td>
+                <td>{d['burst']}</td>
+                <td>{d['pipelining']}</td>
+                <td>{d['use_case']}</td>
+            </tr>''' for p, d in comparison.items()]) + '</table>', unsafe_allow_html=True)
         
         protocol = st.selectbox("Select Protocol", ["APB", "AXI4-Lite", "UART", "SPI", "I2C"])
         
@@ -1388,6 +1868,18 @@ with tabs[3]:
     
     with col1:
         st.markdown('<div class="card-title">Assertion Input</div>', unsafe_allow_html=True)
+        
+        # SVA Library Browser
+        with st.expander("📚 SVA Pattern Library", expanded=False):
+            st.markdown("*Click to copy common assertion patterns:*")
+            for key, sva in SVA_LIBRARY.items():
+                with st.container():
+                    st.markdown(f"**{sva['name']}** - {sva['description']}")
+                    st.caption(f"Usage: {sva['usage']}")
+                    st.code(sva['code'], language="systemverilog")
+                    if st.button(f"Copy {key}", key=f"copy_sva_{key}"):
+                        st.session_state['sva_clipboard'] = sva['code']
+                        st.success("Copied to clipboard!")
         
         mode = st.radio("Input Type", ["From RTL Code", "From Description"], horizontal=True)
         
@@ -1583,10 +2075,21 @@ Use UVM RAL (Register Abstraction Layer) methodology."""
             </div>
             """, unsafe_allow_html=True)
 
-# Footer
-st.markdown("""
+# Footer with stats
+stats = st.session_state.get('generation_stats', {'total': 0, 'protocols': {}, 'avg_time': 0})
+stats_text = ""
+if stats['total'] > 0:
+    stats_text = f" | 📊 {stats['total']} generations this session"
+    if stats['avg_time'] > 0:
+        stats_text += f" | ⏱️ Avg {stats['avg_time']:.1f}s"
+
+st.markdown(f"""
 <div class="footer">
-    <span style="color: #57606a;">Built by Tushar Pathak</span>
-    <a href="https://github.com/tusharpathaknyu/VerifAI" target="_blank">View on GitHub</a>
+    <span style="color: {theme['text_muted']};">Built by Tushar Pathak{stats_text}</span>
+    <div>
+        <a href="https://github.com/tusharpathaknyu/VerifAI" target="_blank">GitHub</a>
+        <span style="color: {theme['text_muted']}; margin: 0 0.5rem;">|</span>
+        <a href="#" onclick="alert('Keyboard Shortcuts:\\n\\nCtrl+Enter: Generate\\nCtrl+S: Download\\nCtrl+H: Toggle History')">⌨️ Shortcuts</a>
+    </div>
 </div>
 """, unsafe_allow_html=True)
