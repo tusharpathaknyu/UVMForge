@@ -457,3 +457,230 @@ class TestSVALibrary:
         """Test all patterns define a property"""
         for key, pattern in SVA_LIBRARY.items():
             assert 'property' in pattern['code'].lower(), f"No property in {key}"
+
+
+# Import new functions
+from src.app_helpers import (
+    parse_uvm_components,
+    analyze_testbench_complexity,
+    get_signal_explorer_data,
+    generate_enhancement_suggestions
+)
+
+
+class TestParseUVMComponents:
+    """Test UVM component parsing"""
+    
+    def test_parse_separated_files(self):
+        """Test parsing code with file separators"""
+        code = """// ==================== interface.sv ====================
+interface apb_if(input logic clk);
+endinterface
+
+// ==================== driver.sv ====================
+class apb_driver extends uvm_driver;
+endclass"""
+        
+        components = parse_uvm_components(code)
+        assert 'interface.sv' in components
+        assert 'driver.sv' in components
+        assert 'apb_if' in components['interface.sv']
+        assert 'apb_driver' in components['driver.sv']
+    
+    def test_parse_single_file(self):
+        """Test parsing code without separators"""
+        code = """
+interface apb_if(input logic clk);
+endinterface
+
+class apb_driver extends uvm_driver;
+endclass"""
+        
+        components = parse_uvm_components(code)
+        assert len(components) >= 1
+    
+    def test_empty_code(self):
+        """Test parsing empty code"""
+        components = parse_uvm_components("")
+        assert 'full_testbench.sv' in components
+
+
+class TestAnalyzeTestbenchComplexity:
+    """Test testbench complexity analysis"""
+    
+    def test_count_classes(self):
+        """Test counting classes"""
+        code = """
+class driver extends uvm_driver;
+endclass
+
+class monitor extends uvm_monitor;
+endclass
+"""
+        metrics = analyze_testbench_complexity(code)
+        assert metrics['classes'] == 2
+    
+    def test_count_tasks(self):
+        """Test counting tasks"""
+        code = """
+task run_phase();
+endtask
+
+task drive_item();
+endtask
+"""
+        metrics = analyze_testbench_complexity(code)
+        assert metrics['tasks'] == 2
+    
+    def test_count_covergroups(self):
+        """Test counting covergroups"""
+        code = """
+covergroup cg_trans;
+endgroup
+
+covergroup cg_protocol;
+endgroup
+"""
+        metrics = analyze_testbench_complexity(code)
+        assert metrics['covergroups'] == 2
+    
+    def test_complexity_level_basic(self):
+        """Test basic complexity level"""
+        code = "// Simple code"
+        metrics = analyze_testbench_complexity(code)
+        assert metrics['complexity_level'] == 'Basic'
+    
+    def test_complexity_level_advanced(self):
+        """Test advanced complexity level"""
+        code = """
+class driver extends uvm_driver; endclass
+class monitor extends uvm_monitor; endclass
+class agent extends uvm_agent; endclass
+class env extends uvm_env; endclass
+class test extends uvm_test; endclass
+covergroup cg1; endgroup
+covergroup cg2; endgroup
+coverpoint cp1; coverpoint cp2; coverpoint cp3;
+constraint c1 {} constraint c2 {} constraint c3 {}
+"""
+        metrics = analyze_testbench_complexity(code)
+        assert metrics['complexity_level'] in ['Intermediate', 'Advanced']
+    
+    def test_total_lines(self):
+        """Test line counting"""
+        code = "line1\nline2\nline3"
+        metrics = analyze_testbench_complexity(code)
+        assert metrics['total_lines'] == 3
+
+
+class TestSignalExplorer:
+    """Test signal explorer data extraction"""
+    
+    def test_extract_inputs(self):
+        """Test extracting input signals"""
+        rtl = """
+module test(
+    input wire clk,
+    input wire [31:0] data,
+    output wire valid
+);
+endmodule
+"""
+        parsed = parse_rtl(rtl)
+        sig_data = get_signal_explorer_data(parsed)
+        
+        assert len(sig_data['inputs']) >= 1
+    
+    def test_extract_outputs(self):
+        """Test extracting output signals"""
+        rtl = """
+module test(
+    input wire clk,
+    output wire valid,
+    output wire ready
+);
+endmodule
+"""
+        parsed = parse_rtl(rtl)
+        sig_data = get_signal_explorer_data(parsed)
+        
+        assert len(sig_data['outputs']) >= 1
+    
+    def test_extract_clocks(self):
+        """Test extracting clock signals"""
+        rtl = """
+module test(
+    input wire clk,
+    input wire pclk
+);
+endmodule
+"""
+        parsed = parse_rtl(rtl)
+        sig_data = get_signal_explorer_data(parsed)
+        
+        assert len(sig_data['clocks']) >= 1
+    
+    def test_empty_parsed(self):
+        """Test with None parsed data"""
+        sig_data = get_signal_explorer_data(None)
+        assert sig_data['inputs'] == []
+        assert sig_data['outputs'] == []
+
+
+class TestEnhancementSuggestions:
+    """Test enhancement suggestion generation"""
+    
+    def test_suggest_coverage_for_missing(self):
+        """Test suggestion for missing coverage"""
+        rtl = """
+module test(input clk, output valid);
+endmodule
+"""
+        parsed = parse_rtl(rtl)
+        code_without_coverage = "class driver extends uvm_driver; endclass"
+        
+        suggestions = generate_enhancement_suggestions(parsed, code_without_coverage)
+        
+        # Should suggest adding coverage
+        titles = [s['title'] for s in suggestions]
+        assert any('coverage' in t.lower() for t in titles)
+    
+    def test_suggest_constraints_for_missing(self):
+        """Test suggestion for missing constraints"""
+        rtl = """
+module test(input clk, output valid);
+endmodule
+"""
+        parsed = parse_rtl(rtl)
+        code_without_constraints = "class driver extends uvm_driver; endclass"
+        
+        suggestions = generate_enhancement_suggestions(parsed, code_without_constraints)
+        
+        # Should suggest adding constraints
+        titles = [s['title'] for s in suggestions]
+        assert any('constraint' in t.lower() for t in titles)
+    
+    def test_suggestions_have_examples(self):
+        """Test all suggestions have code examples"""
+        parsed = parse_rtl("module test(input clk); endmodule")
+        suggestions = generate_enhancement_suggestions(parsed, "// minimal code")
+        
+        for sug in suggestions:
+            assert 'example' in sug
+            assert len(sug['example']) > 0
+    
+    def test_suggestions_have_priorities(self):
+        """Test all suggestions have priorities"""
+        parsed = parse_rtl("module test(input clk); endmodule")
+        suggestions = generate_enhancement_suggestions(parsed, "// minimal code")
+        
+        for sug in suggestions:
+            assert 'priority' in sug
+            assert sug['priority'] in ['high', 'medium', 'low']
+    
+    def test_max_five_suggestions(self):
+        """Test max 5 suggestions returned"""
+        parsed = parse_rtl("module test(input clk); endmodule")
+        suggestions = generate_enhancement_suggestions(parsed, "// minimal code")
+        
+        assert len(suggestions) <= 5

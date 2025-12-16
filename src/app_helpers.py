@@ -7,8 +7,248 @@ import json
 import io
 import re
 import zipfile
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
+
+
+def parse_uvm_components(code: str) -> Dict[str, str]:
+    """Parse generated code into separate UVM components for tabbed view"""
+    components = {}
+    
+    # Split by the file separator pattern
+    pattern = r'// ==+\s*(\S+\.sv)\s*==+'
+    parts = re.split(pattern, code)
+    
+    if len(parts) > 1:
+        # Parts alternate between content and filename
+        for i in range(1, len(parts), 2):
+            if i < len(parts):
+                filename = parts[i].strip()
+                content = parts[i + 1].strip() if i + 1 < len(parts) else ""
+                if content:
+                    components[filename] = content
+    
+    if not components:
+        # Try to identify components by class definitions
+        component_patterns = {
+            'interface': (r'interface\s+\w+.*?endinterface', 'interface.sv'),
+            'transaction': (r'class\s+\w+_seq_item\s+extends.*?endclass', 'seq_item.sv'),
+            'driver': (r'class\s+\w+_driver\s+extends.*?endclass', 'driver.sv'),
+            'monitor': (r'class\s+\w+_monitor\s+extends.*?endclass', 'monitor.sv'),
+            'agent': (r'class\s+\w+_agent\s+extends.*?endclass', 'agent.sv'),
+            'scoreboard': (r'class\s+\w+_scoreboard\s+extends.*?endclass', 'scoreboard.sv'),
+            'coverage': (r'class\s+\w+_coverage\s+extends.*?endclass', 'coverage.sv'),
+            'env': (r'class\s+\w+_env\s+extends.*?endclass', 'env.sv'),
+            'sequence': (r'class\s+\w+_sequence\s+extends.*?endclass', 'sequence.sv'),
+            'test': (r'class\s+\w+_test\s+extends.*?endclass', 'test.sv'),
+        }
+        
+        for comp_type, (pattern, filename) in component_patterns.items():
+            matches = re.findall(pattern, code, re.DOTALL | re.IGNORECASE)
+            if matches:
+                components[filename] = '\n\n'.join(matches)
+        
+        if not components:
+            components['full_testbench.sv'] = code
+    
+    return components
+
+
+def analyze_testbench_complexity(code: str) -> Dict[str, Any]:
+    """Analyze testbench complexity and provide metrics"""
+    metrics = {
+        'total_lines': len(code.split('\n')),
+        'classes': len(re.findall(r'\bclass\s+\w+', code)),
+        'functions': len(re.findall(r'\bfunction\s+', code)),
+        'tasks': len(re.findall(r'\btask\s+', code)),
+        'assertions': len(re.findall(r'\bassert\s*\(', code)),
+        'covergroups': len(re.findall(r'\bcovergroup\s+', code)),
+        'coverpoints': len(re.findall(r'\bcoverpoint\s+', code)),
+        'uvm_macros': len(re.findall(r'`uvm_\w+', code)),
+        'constraints': len(re.findall(r'\bconstraint\s+', code)),
+        'virtual_ifs': len(re.findall(r'virtual\s+interface', code)),
+    }
+    
+    # Calculate complexity score (1-10)
+    score = min(10, (
+        metrics['classes'] * 0.5 +
+        metrics['functions'] * 0.3 +
+        metrics['tasks'] * 0.3 +
+        metrics['assertions'] * 0.5 +
+        metrics['covergroups'] * 0.8 +
+        metrics['coverpoints'] * 0.3 +
+        metrics['constraints'] * 0.4
+    ))
+    metrics['complexity_score'] = round(score, 1)
+    
+    # Determine complexity level
+    if score < 3:
+        metrics['complexity_level'] = 'Basic'
+    elif score < 6:
+        metrics['complexity_level'] = 'Intermediate'
+    else:
+        metrics['complexity_level'] = 'Advanced'
+    
+    return metrics
+
+
+def get_signal_explorer_data(parsed: Any) -> Dict[str, List[Dict]]:
+    """Extract signal data for interactive explorer"""
+    explorer_data = {
+        'inputs': [],
+        'outputs': [],
+        'clocks': [],
+        'resets': [],
+        'internal': []
+    }
+    
+    if not parsed:
+        return explorer_data
+    
+    # Process inputs
+    for sig in getattr(parsed, 'inputs', []):
+        width = 1  # Default
+        if hasattr(parsed, 'input_widths') and sig in parsed.input_widths:
+            width = parsed.input_widths[sig]
+        explorer_data['inputs'].append({
+            'name': sig,
+            'width': width,
+            'type': 'input',
+            'category': 'control' if any(k in sig.lower() for k in ['clk', 'rst', 'en', 'sel']) else 'data'
+        })
+    
+    # Process outputs
+    for sig in getattr(parsed, 'outputs', []):
+        width = 1
+        if hasattr(parsed, 'output_widths') and sig in parsed.output_widths:
+            width = parsed.output_widths[sig]
+        explorer_data['outputs'].append({
+            'name': sig,
+            'width': width,
+            'type': 'output',
+            'category': 'control' if any(k in sig.lower() for k in ['ready', 'valid', 'done', 'err']) else 'data'
+        })
+    
+    # Process clocks
+    for clk in getattr(parsed, 'clocks', []):
+        explorer_data['clocks'].append({
+            'name': clk,
+            'type': 'clock',
+            'category': 'clock'
+        })
+    
+    # Process resets
+    for rst in getattr(parsed, 'resets', []):
+        active_low = 'n' in rst.lower() or rst.endswith('_n') or rst.endswith('_b')
+        explorer_data['resets'].append({
+            'name': rst,
+            'type': 'reset',
+            'active_low': active_low,
+            'category': 'reset'
+        })
+    
+    return explorer_data
+
+
+def generate_enhancement_suggestions(parsed: Any, code: str) -> List[Dict[str, str]]:
+    """Generate suggestions for testbench improvements"""
+    suggestions = []
+    
+    code_lower = code.lower()
+    
+    # Check for missing components
+    if 'covergroup' not in code_lower:
+        suggestions.append({
+            'type': 'coverage',
+            'priority': 'high',
+            'title': 'Add Functional Coverage',
+            'description': 'Consider adding covergroups to track verification progress and ensure all scenarios are tested.',
+            'example': '''covergroup cg_transactions @(posedge clk);
+  cp_write: coverpoint write;
+  cp_addr: coverpoint addr { bins ranges[] = {[0:255]}; }
+  cross_wr_addr: cross cp_write, cp_addr;
+endgroup'''
+        })
+    
+    if 'constraint' not in code_lower:
+        suggestions.append({
+            'type': 'constraints',
+            'priority': 'medium',
+            'title': 'Add Randomization Constraints',
+            'description': 'Add constraints to generate meaningful random stimulus patterns.',
+            'example': '''constraint valid_addr_c {
+  addr inside {[0:255]};
+  addr % 4 == 0; // Word-aligned
+}'''
+        })
+    
+    if 'assert' not in code_lower:
+        suggestions.append({
+            'type': 'assertions',
+            'priority': 'high',
+            'title': 'Add Assertions',
+            'description': 'Immediate and concurrent assertions help catch bugs early.',
+            'example': '''// Immediate assertion
+assert(valid |-> ready within 10 cycles);
+
+// Concurrent assertion  
+property p_handshake;
+  @(posedge clk) valid |-> ##[1:10] ready;
+endproperty
+assert property(p_handshake);'''
+        })
+    
+    if 'uvm_error' not in code_lower:
+        suggestions.append({
+            'type': 'reporting',
+            'priority': 'medium',
+            'title': 'Improve Error Reporting',
+            'description': 'Use UVM reporting macros for better debug visibility.',
+            'example': '''`uvm_info("SCOREBOARD", $sformatf("Transaction received: addr=0x%h", tx.addr), UVM_MEDIUM)
+`uvm_error("SCOREBOARD", "Data mismatch detected!")'''
+        })
+    
+    if parsed and hasattr(parsed, 'complexity') and parsed.complexity:
+        if parsed.complexity.has_fsm:
+            if 'fsm' not in code_lower and 'state' not in code_lower:
+                suggestions.append({
+                    'type': 'fsm',
+                    'priority': 'high',
+                    'title': 'Add FSM Coverage',
+                    'description': f'Design has FSM with {parsed.complexity.fsm_states} states. Add coverage for state transitions.',
+                    'example': '''covergroup cg_fsm_states;
+  cp_state: coverpoint dut.state {
+    bins idle = {IDLE};
+    bins active = {ACTIVE};
+    bins done = {DONE};
+  }
+  cp_transitions: coverpoint dut.state {
+    bins idle_to_active = (IDLE => ACTIVE);
+    bins active_to_done = (ACTIVE => DONE);
+  }
+endgroup'''
+                })
+    
+    if 'virtual sequence' not in code_lower:
+        suggestions.append({
+            'type': 'architecture',
+            'priority': 'low',
+            'title': 'Consider Virtual Sequences',
+            'description': 'Virtual sequences coordinate multiple agents for complex scenarios.',
+            'example': '''class my_virtual_sequence extends uvm_sequence;
+  agent1_sequence seq1;
+  agent2_sequence seq2;
+  
+  task body();
+    fork
+      seq1.start(p_sequencer.agent1_seqr);
+      seq2.start(p_sequencer.agent2_seqr);
+    join
+  endtask
+endclass'''
+        })
+    
+    return suggestions[:5]  # Return top 5 suggestions
 
 def generate_wavedrom(protocol: str) -> str:
     """Generate WaveDrom JSON for protocol timing diagrams"""
