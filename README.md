@@ -7,7 +7,7 @@
 **🤖 Transform Natural Language → Production-Ready UVM Testbenches**
 
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9+-blue.svg?style=flat-square&logo=python)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-38%20Passing-success?style=flat-square&logo=pytest)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-61%20Passing-success?style=flat-square&logo=pytest)](tests/)
 [![UVM 1.2](https://img.shields.io/badge/UVM-1.2%20Compatible-orange.svg?style=flat-square)](https://www.accellera.org/downloads/standards/uvm)
 [![Protocols](https://img.shields.io/badge/Protocols-5%20Supported-blue?style=flat-square)](README.md#-protocol-support)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
@@ -42,16 +42,38 @@
    └── apb_top_tb.sv        (Top testbench)
 ```
 
-## 🌟 Why VerifAI?
+## 🌟 Why VerifAI? (What ChatGPT Can't Do)
 
-| Traditional Approach | With VerifAI |
-|---------------------|--------------|
-| ⏰ Days of boilerplate coding | ⚡ **5 seconds** generation |
-| 🐛 Copy-paste errors | ✅ Consistent, tested templates |
-| 📚 Reference manual lookup | 🤖 AI understands your intent |
-| 🔄 Repetitive protocol code | 🎯 Focus on verification strategy |
+| Feature | ChatGPT/Gemini | VerifAI |
+|---------|----------------|---------|
+| Generic UVM snippets | ✅ | ✅ |
+| **RTL-aware generation** | ❌ | ✅ **Exact port matching!** |
+| **IP-XACT/SystemRDL import** | ❌ | ✅ **Industry standard** |
+| Protocol auto-detection | ❌ | ✅ APB, AXI, SPI, I2C, UART |
+| FSM detection | ❌ | ✅ State machine analysis |
+| Register-specific tests | ❌ | ✅ From spec files |
 
 ## ✨ Features
+
+### 🔌 RTL-Aware Generation (NEW!)
+Upload your Verilog/SystemVerilog → Get testbench with **exact port matching**
+```
+Upload: my_dut.sv
+↓ VerifAI Analyzes:
+  ✓ Extracts ports: pclk, preset_n, psel, pwdata[31:0]...
+  ✓ Detects clock (pclk) and reset (preset_n, active-low)
+  ✓ Identifies protocol: APB (95% confidence)
+  ✓ Finds FSM: IDLE → SETUP → ACCESS
+↓ Generates:
+  Complete UVM testbench with EXACT DUT instantiation!
+```
+
+### 📋 Spec Import (NEW!)
+Import industry-standard register specifications:
+- **IP-XACT** (IEEE 1685) - Industry standard
+- **SystemRDL** - Semiconductor company favorite
+- **CSV** - Simple spreadsheet format
+- **JSON** - Flexible custom format
 
 ### 🤖 AI-Powered Understanding
 - Natural language specification parsing

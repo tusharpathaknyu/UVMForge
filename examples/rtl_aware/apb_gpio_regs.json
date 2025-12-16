@@ -1,0 +1,111 @@
+{
+    "name": "apb_gpio",
+    "description": "APB GPIO Controller Register Map",
+    "data_width": 32,
+    "addr_width": 8,
+    "base_address": 0,
+    "registers": [
+        {
+            "name": "GPIO_DATA",
+            "address": "0x00",
+            "description": "GPIO Data Register",
+            "width": 32,
+            "reset": 0,
+            "fields": [
+                {
+                    "name": "DATA",
+                    "offset": 0,
+                    "width": 16,
+                    "access": "rw",
+                    "reset": 0,
+                    "description": "GPIO data value for pins 0-15"
+                }
+            ]
+        },
+        {
+            "name": "GPIO_DIR",
+            "address": "0x04",
+            "description": "GPIO Direction Register",
+            "width": 32,
+            "reset": 0,
+            "fields": [
+                {
+                    "name": "DIR",
+                    "offset": 0,
+                    "width": 16,
+                    "access": "rw",
+                    "reset": 0,
+                    "description": "Direction control: 1=output, 0=input"
+                }
+            ]
+        },
+        {
+            "name": "GPIO_INT_EN",
+            "address": "0x08",
+            "description": "GPIO Interrupt Enable",
+            "width": 32,
+            "reset": 0,
+            "fields": [
+                {
+                    "name": "INT_EN",
+                    "offset": 0,
+                    "width": 16,
+                    "access": "rw",
+                    "reset": 0,
+                    "description": "Interrupt enable per GPIO pin"
+                }
+            ]
+        },
+        {
+            "name": "GPIO_INT_STAT",
+            "address": "0x0C",
+            "description": "GPIO Interrupt Status",
+            "width": 32,
+            "reset": 0,
+            "fields": [
+                {
+                    "name": "INT_STAT",
+                    "offset": 0,
+                    "width": 16,
+                    "access": "w1c",
+                    "reset": 0,
+                    "description": "Interrupt status - write 1 to clear"
+                }
+            ]
+        },
+        {
+            "name": "GPIO_INT_TYPE",
+            "address": "0x10",
+            "description": "GPIO Interrupt Type",
+            "width": 32,
+            "reset": 0,
+            "fields": [
+                {
+                    "name": "INT_TYPE",
+                    "offset": 0,
+                    "width": 16,
+                    "access": "rw",
+                    "reset": 0,
+                    "description": "Type: 0=level triggered, 1=edge triggered"
+                }
+            ]
+        },
+        {
+            "name": "GPIO_INT_POL",
+            "address": "0x14",
+            "description": "GPIO Interrupt Polarity",
+            "width": 32,
+            "reset": 0,
+            "fields": [
+                {
+                    "name": "INT_POL",
+                    "offset": 0,
+                    "width": 16,
+                    "access": "rw",
+                    "reset": 0,
+                    "description": "Polarity: 0=low/falling, 1=high/rising"
+                }
+            ]
+        }
+    ]
+}

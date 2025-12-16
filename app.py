@@ -2,6 +2,11 @@
 VerifAI Web UI
 ==============
 Streamlit-based web interface for VerifAI UVM testbench generator.
+
+Features:
+- Natural Language → UVM Testbench
+- RTL Upload → Exact Port-Matched Testbench (NEW!)
+- IP-XACT/SystemRDL/CSV Import → Register Tests (NEW!)
 """
 
 import streamlit as st
@@ -18,6 +23,9 @@ sys.path.insert(0, str(Path(__file__).parent / 'src'))
 from src.parser import SpecParser, ParsedSpec
 from src.generator import UVMGenerator
 from src.llm_client import get_llm_client, MockLLMClient
+from src.rtl_parser import RTLParser, analyze_rtl
+from src.spec_import import UnifiedSpecParser, spec_to_dict
+from src.rtl_aware_gen import RTLAwareGenerator
 
 # Page configuration
 st.set_page_config(
@@ -77,7 +85,14 @@ st.markdown("""
 
 # Header
 st.markdown('<h1 class="main-header">🚀 VerifAI</h1>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">AI-Powered UVM Testbench Generator</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">AI-Powered UVM Testbench Generator | RTL-Aware | Spec Import</p>', unsafe_allow_html=True)
+
+# Main tabs for different modes
+main_tab1, main_tab2, main_tab3 = st.tabs([
+    "📝 Natural Language Mode", 
+    "🔌 RTL-Aware Mode (NEW!)", 
+    "📋 Spec Import Mode (NEW!)"
+])
 
 # Sidebar
 with st.sidebar:
@@ -151,8 +166,12 @@ with st.sidebar:
     [Documentation](#)
     """)
 
-# Main content
-col1, col2 = st.columns([1, 1])
+# =============================================================================
+# TAB 1: Natural Language Mode (Original)
+# =============================================================================
+with main_tab1:
+    # Main content
+    col1, col2 = st.columns([1, 1])
 
 with col1:
     st.header("📝 Specification")
@@ -292,6 +311,312 @@ if generate_btn and user_spec:
             st.error(f"❌ Error generating files: {str(e)}")
             import traceback
             st.code(traceback.format_exc())
+
+# =============================================================================
+# TAB 2: RTL-Aware Mode (NEW!)
+# =============================================================================
+with main_tab2:
+    st.markdown("""
+    ### 🔌 RTL-Aware Testbench Generation
+    
+    **What makes this different from ChatGPT?**
+    - ✅ **Exact port matching** - No typos, correct widths
+    - ✅ **Auto-detects clock/reset** - Correct polarity
+    - ✅ **Protocol detection** - Recognizes APB, AXI, SPI, I2C, UART
+    - ✅ **FSM-aware** - Detects state machines in your design
+    
+    Upload your Verilog/SystemVerilog file and get a testbench that **exactly matches your DUT**.
+    """)
+    
+    rtl_col1, rtl_col2 = st.columns([1, 1])
+    
+    with rtl_col1:
+        st.subheader("📤 Upload RTL")
+        
+        rtl_upload = st.file_uploader(
+            "Upload Verilog/SystemVerilog file",
+            type=['v', 'sv', 'vh', 'svh'],
+            help="Upload your DUT source file"
+        )
+        
+        st.markdown("**Or paste RTL code:**")
+        rtl_code = st.text_area(
+            "RTL Code",
+            height=300,
+            placeholder="""module my_apb_slave #(
+    parameter DATA_WIDTH = 32
+) (
+    input  logic        pclk,
+    input  logic        preset_n,
+    input  logic        psel,
+    input  logic        penable,
+    ...
+);""",
+            label_visibility="collapsed"
+        )
+        
+        # Optional register spec
+        st.subheader("📋 Optional: Register Spec")
+        reg_spec_upload = st.file_uploader(
+            "Upload register spec (IP-XACT, SystemRDL, CSV, JSON)",
+            type=['xml', 'rdl', 'csv', 'json'],
+            help="Optional: Import register definitions for register-specific tests"
+        )
+        
+        generate_rtl_btn = st.button("🚀 Generate RTL-Aware Testbench", key="rtl_gen", use_container_width=True)
+    
+    with rtl_col2:
+        st.subheader("📊 RTL Analysis")
+        rtl_analysis_placeholder = st.empty()
+    
+    # Process RTL
+    if generate_rtl_btn:
+        rtl_content = ""
+        if rtl_upload:
+            rtl_content = rtl_upload.read().decode('utf-8')
+        elif rtl_code:
+            rtl_content = rtl_code
+        
+        if rtl_content:
+            with st.spinner("🔍 Analyzing RTL..."):
+                try:
+                    # Analyze RTL
+                    analysis = analyze_rtl(rtl_content)
+                    
+                    # Display analysis
+                    with rtl_analysis_placeholder.container():
+                        st.success(f"✅ Parsed module: **{analysis['module_name']}**")
+                        
+                        acol1, acol2, acol3 = st.columns(3)
+                        with acol1:
+                            st.metric("Input Ports", len(analysis['ports']['inputs']))
+                        with acol2:
+                            st.metric("Output Ports", len(analysis['ports']['outputs']))
+                        with acol3:
+                            st.metric("Parameters", len(analysis['parameters']))
+                        
+                        # Protocol hints
+                        if analysis['protocol_hints']:
+                            st.subheader("🎯 Detected Protocol")
+                            for hint in analysis['protocol_hints'][:3]:
+                                confidence_pct = int(hint['confidence'] * 100)
+                                st.progress(confidence_pct / 100, text=f"{hint['protocol'].upper()}: {confidence_pct}% - {hint['reason']}")
+                        
+                        # Clock/Reset
+                        st.subheader("⏰ Clock & Reset")
+                        st.write(f"**Clocks:** {', '.join(analysis['clocks']) or 'None detected'}")
+                        st.write(f"**Resets:** {', '.join(analysis['resets']['signals']) or 'None detected'}")
+                        
+                        # FSM
+                        if analysis['fsm']['detected']:
+                            st.subheader("🔄 FSM Detected")
+                            st.write(f"**States:** {', '.join(analysis['fsm']['states'])}")
+                        
+                        # Ports table
+                        st.subheader("📍 Ports")
+                        port_data = []
+                        for port in analysis['ports']['inputs'][:10]:
+                            port_data.append({"Direction": "input", "Name": port['name'], "Width": port['width']})
+                        for port in analysis['ports']['outputs'][:10]:
+                            port_data.append({"Direction": "output", "Name": port['name'], "Width": port['width']})
+                        st.dataframe(port_data, use_container_width=True)
+                    
+                    # Generate testbench
+                    with st.spinner("⚙️ Generating RTL-aware testbench..."):
+                        generator = RTLAwareGenerator()
+                        
+                        # Optional register spec
+                        reg_spec_content = None
+                        reg_spec_filename = None
+                        if reg_spec_upload:
+                            reg_spec_content = reg_spec_upload.read().decode('utf-8')
+                            reg_spec_filename = reg_spec_upload.name
+                        
+                        files = generator.generate_from_rtl(rtl_content, reg_spec_content, reg_spec_filename)
+                        
+                        st.success(f"✅ Generated {len(files)} RTL-aware files!")
+                        
+                        # Preview and download
+                        rtl_tab1, rtl_tab2 = st.tabs(["👁️ Preview", "⬇️ Download"])
+                        
+                        with rtl_tab1:
+                            file_to_preview = st.selectbox(
+                                "Select file:",
+                                list(files.keys()),
+                                key="rtl_preview"
+                            )
+                            st.code(files[file_to_preview], language="systemverilog")
+                        
+                        with rtl_tab2:
+                            zip_buffer = io.BytesIO()
+                            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                                for fname, content in files.items():
+                                    zf.writestr(fname, content)
+                            zip_buffer.seek(0)
+                            
+                            st.download_button(
+                                label="📥 Download All Files (ZIP)",
+                                data=zip_buffer,
+                                file_name=f"{analysis['module_name']}_rtl_aware_tb.zip",
+                                mime="application/zip",
+                                use_container_width=True,
+                                key="rtl_download"
+                            )
+                    
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
+                    import traceback
+                    st.code(traceback.format_exc())
+        else:
+            st.warning("Please upload or paste RTL code")
+
+# =============================================================================
+# TAB 3: Spec Import Mode (NEW!)
+# =============================================================================
+with main_tab3:
+    st.markdown("""
+    ### 📋 Specification Import
+    
+    **Import industry-standard register specifications:**
+    - 🔷 **IP-XACT** (IEEE 1685) - Industry standard
+    - 🔷 **SystemRDL** - Popular in semiconductor companies
+    - 🔷 **CSV** - Simple spreadsheet format
+    - 🔷 **JSON** - Flexible custom format
+    
+    VerifAI generates:
+    - Register access sequences for each register
+    - Field-level coverage
+    - Reset value verification
+    - Access type checking (RO, RW, W1C, etc.)
+    """)
+    
+    spec_col1, spec_col2 = st.columns([1, 1])
+    
+    with spec_col1:
+        st.subheader("📤 Upload Specification")
+        
+        spec_format = st.selectbox(
+            "Specification Format",
+            ["Auto-Detect", "IP-XACT (XML)", "SystemRDL", "CSV", "JSON"]
+        )
+        
+        spec_upload = st.file_uploader(
+            "Upload specification file",
+            type=['xml', 'rdl', 'csv', 'json'],
+            help="Upload your register specification"
+        )
+        
+        st.markdown("**Or use sample CSV:**")
+        sample_csv = """Register Name,Address,Field Name,Bit Range,Access,Reset Value,Description
+STATUS,0x00,BUSY,0,RO,0,Device busy flag
+STATUS,0x00,ERROR,1,RO,0,Error flag  
+STATUS,0x00,DONE,2,RO,0,Operation complete
+CONTROL,0x04,START,0,RW,0,Start operation
+CONTROL,0x04,RESET,1,W1C,0,Reset device
+CONTROL,0x04,MODE,7:4,RW,0,Operation mode
+DATA,0x08,VALUE,31:0,RW,0,Data register
+CONFIG,0x0C,ENABLE,0,RW,0,Enable device
+CONFIG,0x0C,INT_EN,1,RW,0,Interrupt enable"""
+        
+        if st.button("📋 Use Sample CSV"):
+            st.session_state['sample_spec'] = sample_csv
+        
+        spec_content = st.text_area(
+            "Or paste specification:",
+            value=st.session_state.get('sample_spec', ''),
+            height=200,
+            placeholder="Paste IP-XACT XML, SystemRDL, CSV, or JSON here..."
+        )
+        
+        parse_spec_btn = st.button("📊 Parse Specification", key="parse_spec", use_container_width=True)
+    
+    with spec_col2:
+        st.subheader("📊 Parsed Registers")
+        spec_analysis_placeholder = st.empty()
+    
+    # Process specification
+    if parse_spec_btn:
+        content = ""
+        filename = ""
+        
+        if spec_upload:
+            content = spec_upload.read().decode('utf-8')
+            filename = spec_upload.name
+        elif spec_content:
+            content = spec_content
+            filename = "input.csv" if ',' in content else "input.json"
+        
+        if content:
+            with st.spinner("📊 Parsing specification..."):
+                try:
+                    parser = UnifiedSpecParser()
+                    parsed = parser.parse(content, filename)
+                    spec_dict = spec_to_dict(parsed)
+                    
+                    with spec_analysis_placeholder.container():
+                        st.success(f"✅ Parsed: **{parsed.name}** ({parsed.source_format})")
+                        
+                        scol1, scol2, scol3 = st.columns(3)
+                        with scol1:
+                            st.metric("Total Registers", parsed.total_registers)
+                        with scol2:
+                            st.metric("Data Width", f"{parsed.data_width} bits")
+                        with scol3:
+                            st.metric("Register Blocks", len(parsed.register_blocks))
+                        
+                        # Register table
+                        st.subheader("📋 Registers")
+                        for block in parsed.register_blocks:
+                            st.markdown(f"**Block: {block.name}** (Base: 0x{block.base_address:X})")
+                            reg_data = []
+                            for reg in block.registers:
+                                reg_data.append({
+                                    "Name": reg.name,
+                                    "Address": reg.address_hex,
+                                    "Width": reg.width,
+                                    "Access": reg.access.value,
+                                    "Fields": len(reg.fields)
+                                })
+                            st.dataframe(reg_data, use_container_width=True)
+                            
+                            # Field details (expandable)
+                            with st.expander("📍 Field Details"):
+                                for reg in block.registers:
+                                    if reg.fields:
+                                        st.markdown(f"**{reg.name}:**")
+                                        field_data = []
+                                        for f in reg.fields:
+                                            field_data.append({
+                                                "Field": f.name,
+                                                "Bits": f"{f.msb}:{f.lsb}" if f.bit_width > 1 else str(f.bit_offset),
+                                                "Access": f.access.value,
+                                                "Reset": f"0x{f.reset_value:X}"
+                                            })
+                                        st.dataframe(field_data, use_container_width=True)
+                    
+                    st.divider()
+                    
+                    # Generate UVM from spec
+                    st.subheader("🚀 Generate Register Tests")
+                    st.info("💡 Combine with RTL upload in the RTL-Aware tab for complete testbench generation!")
+                    
+                    # Show JSON export
+                    with st.expander("📄 Export as JSON"):
+                        import json
+                        st.code(json.dumps(spec_dict, indent=2), language="json")
+                        st.download_button(
+                            "📥 Download JSON",
+                            json.dumps(spec_dict, indent=2),
+                            f"{parsed.name}_registers.json",
+                            "application/json"
+                        )
+                    
+                except Exception as e:
+                    st.error(f"❌ Error parsing specification: {str(e)}")
+                    import traceback
+                    st.code(traceback.format_exc())
+        else:
+            st.warning("Please upload or paste a specification")
 
 # Footer
 st.markdown("---")

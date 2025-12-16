@@ -1,0 +1,7 @@
+Register Name,Address,Field Name,Bit Range,Access,Reset Value,Description
+GPIO_DATA,0x00,DATA,15:0,RW,0x0000,GPIO data value
+GPIO_DIR,0x04,DIR,15:0,RW,0x0000,GPIO direction (1=output)
+GPIO_INT_EN,0x08,INT_EN,15:0,RW,0x0000,Interrupt enable per GPIO
+GPIO_INT_STAT,0x0C,INT_STAT,15:0,W1C,0x0000,Interrupt status (write 1 to clear)
+GPIO_INT_TYPE,0x10,INT_TYPE,15:0,RW,0x0000,Interrupt type (0=level 1=edge)
+GPIO_INT_POL,0x14,INT_POL,15:0,RW,0x0000,Interrupt polarity
