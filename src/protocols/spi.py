@@ -1,5 +1,5 @@
 """
-SPI Protocol Configuration for VerifAI
+SPI Protocol Configuration for UVMForge
 """
 
 from dataclasses import dataclass, field

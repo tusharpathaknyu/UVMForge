@@ -1,7 +1,7 @@
 """
-VerifAI Test Suite
+UVMForge Test Suite
 ==================
-Unit tests for the VerifAI UVM testbench generator.
+Unit tests for the UVMForge UVM testbench generator.
 """
 
 import pytest

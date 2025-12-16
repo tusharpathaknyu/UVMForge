@@ -1,6 +1,6 @@
-# Contributing to VerifAI 🤝
+# Contributing to UVMForge 🤝
 
-Thank you for your interest in contributing to VerifAI! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to UVMForge! This document provides guidelines and instructions for contributing.
 
 ## 📋 Table of Contents
 
@@ -34,9 +34,9 @@ We are committed to providing a welcoming and inspiring community for all. Pleas
 
 ```bash
 # Fork the repository on GitHub, then:
-git clone https://github.com/YOUR_USERNAME/VerifAI.git
-cd VerifAI
-git remote add upstream https://github.com/tusharpathaknyu/VerifAI.git
+git clone https://github.com/YOUR_USERNAME/UVMForge.git
+cd UVMForge
+git remote add upstream https://github.com/tusharpathaknyu/UVMForge.git
 ```
 
 ---
@@ -64,7 +64,7 @@ pip install pytest pytest-cov black isort flake8
 pytest tests/ -v
 
 # Run the CLI
-python verifai.py --help
+python uvmforge.py --help
 
 # Start the web UI
 streamlit run app.py
@@ -213,7 +213,7 @@ In `src/llm_client.py`:
 
 ### 6. Add Tests
 
-In `tests/test_verifai.py`:
+In `tests/test_uvmforge.py`:
 
 ```python
 class TestYourProtocol:
@@ -245,13 +245,13 @@ class TestYourProtocol:
 
 ```bash
 # Format code
-black src/ tests/ verifai.py --line-length 120
+black src/ tests/ uvmforge.py --line-length 120
 
 # Sort imports
-isort src/ tests/ verifai.py
+isort src/ tests/ uvmforge.py
 
 # Lint
-flake8 src/ tests/ verifai.py --max-line-length=120
+flake8 src/ tests/ uvmforge.py --max-line-length=120
 ```
 
 ### SystemVerilog Templates
@@ -275,10 +275,10 @@ pytest tests/ -v
 
 ```bash
 # Run a specific test class
-pytest tests/test_verifai.py::TestI2CProtocol -v
+pytest tests/test_uvmforge.py::TestI2CProtocol -v
 
 # Run a specific test
-pytest tests/test_verifai.py::TestI2CProtocol::test_i2c_generation -v
+pytest tests/test_uvmforge.py::TestI2CProtocol::test_i2c_generation -v
 ```
 
 ### Test Coverage
@@ -304,7 +304,7 @@ open htmlcov/index.html
 ## Project Structure
 
 ```
-VerifAI/
+UVMForge/
 ├── src/
 │   ├── parser.py          # NL specification parser
 │   ├── generator.py       # UVM code generator
@@ -317,10 +317,10 @@ VerifAI/
 │   ├── spi/               # SPI templates
 │   └── i2c/               # I2C templates
 ├── tests/
-│   └── test_verifai.py    # Test suite
+│   └── test_uvmforge.py    # Test suite
 ├── examples/              # Generated examples
 ├── app.py                 # Streamlit web UI
-└── verifai.py             # CLI entry point
+└── uvmforge.py             # CLI entry point
 ```
 
 ---

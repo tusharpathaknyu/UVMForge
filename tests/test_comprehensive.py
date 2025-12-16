@@ -1,5 +1,5 @@
 """
-Comprehensive New Tests for VerifAI
+Comprehensive New Tests for UVMForge
 ====================================
 Additional edge cases, stress tests, and real-world scenarios
 """

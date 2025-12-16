@@ -1,4 +1,4 @@
-# VerifAI - UVM Testbench Generator
+# UVMForge - UVM Testbench Generator
 
 ## 📋 Table of Contents
 1. [Project Overview](#project-overview)
@@ -15,7 +15,7 @@
 
 ## 🎯 Project Overview
 
-**VerifAI** is an AI-powered UVM (Universal Verification Methodology) testbench generator that transforms RTL (Register Transfer Level) code into production-ready SystemVerilog verification environments. It dramatically reduces the time needed to create comprehensive UVM testbenches from days/weeks to seconds.
+**UVMForge** is an AI-powered UVM (Universal Verification Methodology) testbench generator that transforms RTL (Register Transfer Level) code into production-ready SystemVerilog verification environments. It dramatically reduces the time needed to create comprehensive UVM testbenches from days/weeks to seconds.
 
 ### What Problem Does It Solve?
 
@@ -25,7 +25,7 @@ Writing UVM testbenches is one of the most time-consuming tasks in hardware veri
 - Manual writing takes **days to weeks** for complex protocols
 - Protocol-specific timing and coverage requirements need expert knowledge
 
-**VerifAI solves this by:**
+**UVMForge solves this by:**
 - Automatically detecting the protocol (APB, AXI, SPI, UART, I2C)
 - Generating all UVM components with proper methodology
 - Creating protocol-aware assertions and coverage
@@ -72,7 +72,7 @@ Writing UVM testbenches is one of the most time-consuming tasks in hardware veri
 
 The application is deployed and accessible at:
 
-**https://verifai-761803298484.us-central1.run.app**
+**https://uvmforge-761803298484.us-central1.run.app**
 
 No installation required - just open the URL and start generating testbenches!
 
@@ -84,8 +84,8 @@ No installation required - just open the URL and start generating testbenches!
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/tusharpathaknyu/VerifAI.git
-cd VerifAI
+git clone https://github.com/tusharpathaknyu/UVMForge.git
+cd UVMForge
 
 # 2. Create virtual environment
 python -m venv venv
@@ -124,7 +124,7 @@ python -m pytest tests/ --cov=src --cov-report=html
 
 ### Quick Start (3 Steps)
 
-1. **Open the App** → Go to https://verifai-761803298484.us-central1.run.app
+1. **Open the App** → Go to https://uvmforge-761803298484.us-central1.run.app
 2. **Paste RTL Code** → Use "Load APB Example" or paste your own Verilog
 3. **Click Generate** → Download your complete UVM testbench
 
@@ -537,7 +537,7 @@ print(report.gaps)            # [CoverageGap(...), ...]
 
 ### Getting Help
 
-- **GitHub Issues:** https://github.com/tusharpathaknyu/VerifAI/issues
+- **GitHub Issues:** https://github.com/tusharpathaknyu/UVMForge/issues
 - **Documentation:** This file + README.md
 
 ---
@@ -573,7 +573,7 @@ python -m pytest tests/ -v --tb=short
 gcloud auth login
 
 # Deploy
-gcloud run deploy verifai \
+gcloud run deploy uvmforge \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
@@ -585,10 +585,10 @@ gcloud run deploy verifai \
 
 ```bash
 # Build
-docker build -t verifai .
+docker build -t uvmforge .
 
 # Run
-docker run -p 8080:8080 verifai
+docker run -p 8080:8080 uvmforge
 ```
 
 ---

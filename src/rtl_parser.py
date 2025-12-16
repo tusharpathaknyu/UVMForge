@@ -1,6 +1,6 @@
 """
 RTL Parser - Extract information from Verilog/SystemVerilog files
-This is what makes VerifAI different from just using ChatGPT!
+This is what makes UVMForge different from just using ChatGPT!
 """
 
 import re

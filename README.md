@@ -1,20 +1,20 @@
-# VerifAI 🚀
+# UVMForge 🚀
 
 <div align="center">
 
-![VerifAI Banner](https://img.shields.io/badge/VerifAI-AI%20Powered%20UVM-blueviolet?style=for-the-badge)
+![UVMForge Banner](https://img.shields.io/badge/UVMForge-AI%20Powered%20UVM-blueviolet?style=for-the-badge)
 
 **🤖 Transform Natural Language → Production-Ready UVM Testbenches**
 
-[![CI Tests](https://github.com/tusharpathaknyu/VerifAI/actions/workflows/tests.yml/badge.svg)](https://github.com/tusharpathaknyu/VerifAI/actions/workflows/tests.yml)
+[![CI Tests](https://github.com/tusharpathaknyu/UVMForge/actions/workflows/tests.yml/badge.svg)](https://github.com/tusharpathaknyu/UVMForge/actions/workflows/tests.yml)
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9+-blue.svg?style=flat-square&logo=python)](https://python.org)
 [![Tests](https://img.shields.io/badge/Tests-80%20Passing-success?style=flat-square&logo=pytest)](tests/)
 [![UVM 1.2](https://img.shields.io/badge/UVM-1.2%20Compatible-orange.svg?style=flat-square)](https://www.accellera.org/downloads/standards/uvm)
 [![Protocols](https://img.shields.io/badge/Protocols-5%20Supported-blue?style=flat-square)](README.md#-protocol-support)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
-[![Live Demo](https://img.shields.io/badge/🌐%20Live%20Demo-Cloud%20Run-4285F4?style=flat-square&logo=googlecloud)](https://verifai-761803298484.us-central1.run.app)
+[![Live Demo](https://img.shields.io/badge/🌐%20Live%20Demo-Cloud%20Run-4285F4?style=flat-square&logo=googlecloud)](https://uvmforge-761803298484.us-central1.run.app)
 
-[🌐 **Try Live Demo**](https://verifai-761803298484.us-central1.run.app) • [Features](#-features) • [Quick Start](#-quick-start) • [Examples](#-examples) • [Roadmap](#-roadmap) • [Contributing](#-contributing)
+[🌐 **Try Live Demo**](https://uvmforge-761803298484.us-central1.run.app) • [Features](#-features) • [Quick Start](#-quick-start) • [Examples](#-examples) • [Roadmap](#-roadmap) • [Contributing](#-contributing)
 
 </div>
 
@@ -26,7 +26,7 @@
 📝 Input: "Create a UVM testbench for an APB slave memory controller with 
           STATUS, CONTROL, DATA, and CONFIG registers"
 
-🚀 VerifAI generates in ~5 seconds:
+🚀 UVMForge generates in ~5 seconds:
    ├── apb_pkg.sv           (Package with imports)
    ├── apb_interface.sv     (Bus interface)
    ├── apb_seq_item.sv      (Transaction class)
@@ -42,9 +42,9 @@
    └── apb_top_tb.sv        (Top testbench)
 ```
 
-## 🌟 Why VerifAI? (What ChatGPT Can't Do)
+## 🌟 Why UVMForge? (What ChatGPT Can't Do)
 
-| Feature | ChatGPT/Gemini | VerifAI |
+| Feature | ChatGPT/Gemini | UVMForge |
 |---------|----------------|---------|
 | Generic UVM snippets | ✅ | ✅ |
 | **RTL-aware generation** | ❌ | ✅ **Exact port matching!** |
@@ -61,7 +61,7 @@
 Upload your Verilog/SystemVerilog → Get testbench with **exact port matching**
 ```
 Upload: my_dut.sv
-↓ VerifAI Analyzes:
+↓ UVMForge Analyzes:
   ✓ Extracts ports: pclk, preset_n, psel, pwdata[31:0]...
   ✓ Detects clock (pclk) and reset (preset_n, active-low)
   ✓ Identifies protocol: APB (95% confidence)
@@ -81,7 +81,7 @@ Import industry-standard register specifications:
 Upload your coverage report → Get **targeted sequences to close gaps**
 ```
 Upload: coverage_report.ucdb
-↓ VerifAI Analyzes:
+↓ UVMForge Analyzes:
   ✓ Parses UCDB/UCIS/HTML coverage formats
   ✓ Identifies uncovered bins: addr_0x08 (0%), write_op (23%)
   ✓ Determines priority: High for 0%, boundaries
@@ -93,7 +93,7 @@ Upload: coverage_report.ucdb
 Upload RTL → Get **50+ SystemVerilog Assertions in seconds**
 ```
 Upload: apb_slave.sv
-↓ VerifAI Generates:
+↓ UVMForge Generates:
   ✓ Protocol compliance (APB, AXI, SPI, I2C, UART)
   ✓ Handshake checks (req/ack, valid/ready)
   ✓ Stability rules (data stable when valid)
@@ -146,8 +146,8 @@ Upload: apb_slave.sv
 
 ```bash
 # Clone
-git clone https://github.com/tusharpathaknyu/VerifAI.git
-cd VerifAI
+git clone https://github.com/tusharpathaknyu/UVMForge.git
+cd UVMForge
 
 # Install dependencies
 pip install -r requirements.txt
@@ -163,19 +163,19 @@ export OPENAI_API_KEY="your-openai-key"
 
 ```bash
 # 🎯 Quick generate (uses Gemini by default)
-python verifai.py --spec "APB slave with 4 control registers" --llm gemini
+python uvmforge.py --spec "APB slave with 4 control registers" --llm gemini
 
 # 📁 Output to specific directory
-python verifai.py --spec "AXI4-Lite memory controller" --output ./my_tb
+python uvmforge.py --spec "AXI4-Lite memory controller" --output ./my_tb
 
 # 🔌 Generate UART testbench
-python verifai.py --spec "UART controller with 115200 baud, 8N1" --llm gemini
+python uvmforge.py --spec "UART controller with 115200 baud, 8N1" --llm gemini
 
 # 🤖 Use different LLM
-python verifai.py --spec "UART transmitter" --llm openai
+python uvmforge.py --spec "UART transmitter" --llm openai
 
 # 💻 Fully local with Ollama (no API key needed)
-python verifai.py --spec "SPI master" --llm ollama
+python uvmforge.py --spec "SPI master" --llm ollama
 ```
 
 ### 🌐 Web UI (New!)
@@ -379,8 +379,8 @@ endclass
 ## 📁 Project Structure
 
 ```
-VerifAI/
-├── 📄 verifai.py              # CLI entry point
+UVMForge/
+├── 📄 uvmforge.py              # CLI entry point
 ├── 📄 requirements.txt        # Dependencies
 ├── 📄 README.md               # This file
 ├── 📄 ROADMAP.md              # Development roadmap
@@ -429,13 +429,13 @@ Contributions welcome! Areas where help is needed:
 
 ```bash
 # Fork & clone
-git clone https://github.com/YOUR_USERNAME/VerifAI.git
+git clone https://github.com/YOUR_USERNAME/UVMForge.git
 
 # Create branch
 git checkout -b feature/amazing-feature
 
 # Make changes & test
-python verifai.py --spec "test spec" --llm mock
+python uvmforge.py --spec "test spec" --llm mock
 
 # Submit PR
 ```
@@ -458,7 +458,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-**⭐ Star this repo if VerifAI saves you time!**
+**⭐ Star this repo if UVMForge saves you time!**
 
 Made with 🤖 + ☕ by [Tushar Pathak](https://github.com/tusharpathaknyu)
 

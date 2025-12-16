@@ -1,4 +1,4 @@
-# 🗺️ VerifAI Roadmap
+# 🗺️ UVMForge Roadmap
 
 ## ✅ Phase 1: Foundation (COMPLETED)
 - [x] Core architecture (parser, generator, LLM client)

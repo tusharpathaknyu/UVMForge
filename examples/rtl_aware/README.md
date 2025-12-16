@@ -1,6 +1,6 @@
 # RTL-Aware Example: APB GPIO Controller
 
-This example demonstrates VerifAI's **RTL-Aware** generation capability.
+This example demonstrates UVMForge's **RTL-Aware** generation capability.
 
 ## Files
 
@@ -18,10 +18,10 @@ User: "Write me a UVM testbench for APB"
 ChatGPT: *generates generic APB testbench with guessed ports*
 ```
 
-### VerifAI RTL-Aware Approach:
+### UVMForge RTL-Aware Approach:
 ```
 User: *uploads apb_gpio.sv*
-VerifAI: 
+UVMForge: 
   ✓ Parses exact ports: pclk, preset_n, psel, penable, pwrite...
   ✓ Detects clock (pclk) and reset (preset_n, active-low)
   ✓ Detects APB protocol (95% confidence)
@@ -33,7 +33,7 @@ VerifAI:
 ## How to Use
 
 ### Option 1: Web UI
-1. Go to https://verifai-761803298484.us-central1.run.app
+1. Go to https://uvmforge-761803298484.us-central1.run.app
 2. Click "RTL-Aware Mode" tab
 3. Upload `apb_gpio.sv`
 4. Optionally upload `apb_gpio_regs.csv` for register tests
@@ -88,7 +88,7 @@ The RTL-aware generator creates:
 
 ## Key Advantages
 
-| Feature | ChatGPT | VerifAI RTL-Aware |
+| Feature | ChatGPT | UVMForge RTL-Aware |
 |---------|---------|-------------------|
 | Port names | Guessed | Exact from RTL |
 | Port widths | Generic | Exact from RTL |
@@ -101,7 +101,7 @@ The RTL-aware generator creates:
 
 ## Register Specification Formats
 
-VerifAI supports multiple industry-standard formats:
+UVMForge supports multiple industry-standard formats:
 
 ### CSV (Simple)
 ```csv
@@ -126,4 +126,4 @@ Popular in ASIC design companies.
 
 ---
 
-**This is what makes VerifAI valuable - not just AI generation, but RTL-aware, spec-driven verification!**
+**This is what makes UVMForge valuable - not just AI generation, but RTL-aware, spec-driven verification!**

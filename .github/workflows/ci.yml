@@ -1,4 +1,4 @@
-name: VerifAI CI
+name: UVMForge CI
 
 on:
   push:
@@ -54,15 +54,15 @@ jobs:
     
     - name: Check formatting with black
       run: |
-        black --check --diff src/ tests/ verifai.py || true
+        black --check --diff src/ tests/ uvmforge.py || true
     
     - name: Check imports with isort
       run: |
-        isort --check-only --diff src/ tests/ verifai.py || true
+        isort --check-only --diff src/ tests/ uvmforge.py || true
     
     - name: Lint with flake8
       run: |
-        flake8 src/ tests/ verifai.py --max-line-length=120 --ignore=E501,W503
+        flake8 src/ tests/ uvmforge.py --max-line-length=120 --ignore=E501,W503
 
   generate-test:
     runs-on: ubuntu-latest
@@ -80,13 +80,13 @@ jobs:
     
     - name: Test APB generation (mock LLM)
       run: |
-        python verifai.py --spec "APB slave with STATUS register" --llm mock --output ./test_output_apb
+        python uvmforge.py --spec "APB slave with STATUS register" --llm mock --output ./test_output_apb
         ls -la ./test_output_apb/
         test -f ./test_output_apb/apb_driver.sv
     
     - name: Test AXI4-Lite generation (mock LLM)
       run: |
-        python verifai.py --spec "AXI4-Lite memory controller" --llm mock --output ./test_output_axi
+        python uvmforge.py --spec "AXI4-Lite memory controller" --llm mock --output ./test_output_axi
         ls -la ./test_output_axi/
         test -f ./test_output_axi/axi4lite_driver.sv
     

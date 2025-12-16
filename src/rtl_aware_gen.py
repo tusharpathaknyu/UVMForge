@@ -140,7 +140,7 @@ class RTLAwareGenerator:
     def _gen_package(self, spec: RTLAwareSpec) -> str:
         """Generate package with imports"""
         prefix = spec.module_name
-        return f'''// VerifAI Generated - RTL-Aware Package
+        return f'''// UVMForge Generated - RTL-Aware Package
 // Module: {prefix}
 // Detected Protocol: {spec.detected_protocol}
 
@@ -196,7 +196,7 @@ endpackage
         driver_outputs = '\n'.join(f"        output {p.name};" for p in driver_signals)
         monitor_inputs = '\n'.join(f"        input {p.name};" for p in rtl.ports if p.name not in [clock, reset])
         
-        return f'''// VerifAI Generated - RTL-Aware Interface
+        return f'''// UVMForge Generated - RTL-Aware Interface
 // Exact port matching from: {spec.rtl.file_path or spec.module_name}
 
 interface {prefix}_if(input logic {clock});
@@ -253,7 +253,7 @@ endinterface
             valid_addrs = [f"'h{r.address:X}" for r in spec.registers.all_registers]
             constraints.append(f"    constraint valid_addr_c {{ addr inside {{{', '.join(valid_addrs)}}}; }}")
         
-        return f'''// VerifAI Generated - RTL-Aware Sequence Item
+        return f'''// UVMForge Generated - RTL-Aware Sequence Item
 // Data Width: {data_width}, Address Width: {addr_width}
 
 class {prefix}_seq_item extends uvm_sequence_item;
@@ -300,7 +300,7 @@ endclass
         # Generate drive task based on detected protocol
         drive_task = self._gen_protocol_drive_task(spec)
         
-        return f'''// VerifAI Generated - RTL-Aware Driver
+        return f'''// UVMForge Generated - RTL-Aware Driver
 // Detected Protocol: {protocol}
 
 class {prefix}_driver extends uvm_driver #({prefix}_seq_item);
@@ -423,7 +423,7 @@ endclass
         prefix = spec.module_name
         clock = spec.clock
         
-        return f'''// VerifAI Generated - RTL-Aware Monitor
+        return f'''// UVMForge Generated - RTL-Aware Monitor
 
 class {prefix}_monitor extends uvm_monitor;
     `uvm_component_utils({prefix}_monitor)
@@ -464,7 +464,7 @@ endclass
     
     def _gen_sequencer(self, spec: RTLAwareSpec) -> str:
         prefix = spec.module_name
-        return f'''// VerifAI Generated Sequencer
+        return f'''// UVMForge Generated Sequencer
 
 class {prefix}_sequencer extends uvm_sequencer #({prefix}_seq_item);
     `uvm_component_utils({prefix}_sequencer)
@@ -478,7 +478,7 @@ endclass
     
     def _gen_agent(self, spec: RTLAwareSpec) -> str:
         prefix = spec.module_name
-        return f'''// VerifAI Generated Agent
+        return f'''// UVMForge Generated Agent
 
 class {prefix}_agent extends uvm_agent;
     `uvm_component_utils({prefix}_agent)
@@ -511,7 +511,7 @@ endclass
     
     def _gen_scoreboard(self, spec: RTLAwareSpec) -> str:
         prefix = spec.module_name
-        return f'''// VerifAI Generated Scoreboard
+        return f'''// UVMForge Generated Scoreboard
 
 class {prefix}_scoreboard extends uvm_scoreboard;
     `uvm_component_utils({prefix}_scoreboard)
@@ -568,7 +568,7 @@ endclass
         else:
             reg_bins = f"            bins addr_range[] = {{[0:$]}};"
         
-        return f'''// VerifAI Generated Coverage
+        return f'''// UVMForge Generated Coverage
 
 class {prefix}_coverage extends uvm_subscriber #({prefix}_seq_item);
     `uvm_component_utils({prefix}_coverage)
@@ -611,7 +611,7 @@ endclass
     def _gen_sequences(self, spec: RTLAwareSpec) -> str:
         """Generate sequences"""
         prefix = spec.module_name
-        return f'''// VerifAI Generated Sequences
+        return f'''// UVMForge Generated Sequences
 
 class {prefix}_base_seq extends uvm_sequence #({prefix}_seq_item);
     `uvm_object_utils({prefix}_base_seq)
@@ -688,7 +688,7 @@ endclass
         data = req.rdata;
     endtask''')
         
-        return f'''// VerifAI Generated Register Sequences
+        return f'''// UVMForge Generated Register Sequences
 // Source: {spec.registers.source_format} - {spec.registers.source_file}
 // Total Registers: {spec.registers.total_registers}
 
@@ -733,7 +733,7 @@ endclass
     
     def _gen_env(self, spec: RTLAwareSpec) -> str:
         prefix = spec.module_name
-        return f'''// VerifAI Generated Environment
+        return f'''// UVMForge Generated Environment
 
 class {prefix}_env extends uvm_env;
     `uvm_component_utils({prefix}_env)
@@ -764,7 +764,7 @@ endclass
     
     def _gen_test(self, spec: RTLAwareSpec) -> str:
         prefix = spec.module_name
-        return f'''// VerifAI Generated Test
+        return f'''// UVMForge Generated Test
 
 class {prefix}_base_test extends uvm_test;
     `uvm_component_utils({prefix}_base_test)
@@ -831,7 +831,7 @@ endclass
         reset_active = "1'b0" if spec.reset_active_low else "1'b1"
         reset_inactive = "1'b1" if spec.reset_active_low else "1'b0"
         
-        return f'''// VerifAI Generated Top Testbench
+        return f'''// UVMForge Generated Top Testbench
 // DUT: {prefix}
 // Ports: {len(rtl.ports)} (auto-extracted from RTL)
 

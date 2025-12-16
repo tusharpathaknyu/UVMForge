@@ -1,4 +1,4 @@
-# VerifAI Generated Makefile
+# UVMForge Generated Makefile
 # Protocol: AXI4LITE
 # Module: axi4lite_dut
 

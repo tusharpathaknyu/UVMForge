@@ -1,15 +1,15 @@
 #!/bin/bash
-# VerifAI - Google Cloud Run Deployment Script
+# UVMForge - Google Cloud Run Deployment Script
 
 set -e
 
 # Configuration
 PROJECT_ID="${GCP_PROJECT_ID:-your-project-id}"
 REGION="${GCP_REGION:-us-central1}"
-SERVICE_NAME="verifai"
+SERVICE_NAME="uvmforge"
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
 
-echo "🚀 VerifAI Cloud Run Deployment"
+echo "🚀 UVMForge Cloud Run Deployment"
 echo "================================"
 echo "Project: ${PROJECT_ID}"
 echo "Region: ${REGION}"
@@ -107,7 +107,7 @@ echo "🔗 Quick links:"
 echo "  - Application: ${SERVICE_URL}"
 echo "  - Health: ${SERVICE_URL}/_stcore/health"
 echo ""
-echo "🎉 VerifAI is now live!"
+echo "🎉 UVMForge is now live!"
 echo ""
 echo "📝 To generate a UVM testbench:"
 echo "  1. Open ${SERVICE_URL}"

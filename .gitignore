@@ -1,4 +1,4 @@
-# VerifAI - Ignore patterns
+# UVMForge - Ignore patterns
 
 # Environment files (NEVER commit secrets!)
 .env

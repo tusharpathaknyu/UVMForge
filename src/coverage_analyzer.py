@@ -622,7 +622,7 @@ endclass'''
             return "// No coverage gaps found - 100% coverage achieved!"
         
         sequences = []
-        sequences.append(f'''// VerifAI Generated Coverage Closure Sequences
+        sequences.append(f'''// UVMForge Generated Coverage Closure Sequences
 // Target: {module_name}
 // Gaps Found: {len(report.gaps)}
 // Current Coverage: {report.total_coverage:.1f}%
@@ -688,7 +688,7 @@ endclass
         """Generate human-readable coverage gap report"""
         lines = []
         lines.append("=" * 60)
-        lines.append("VerifAI Coverage Gap Analysis Report")
+        lines.append("UVMForge Coverage Gap Analysis Report")
         lines.append("=" * 60)
         lines.append(f"\nTotal Coverage: {report.total_coverage:.1f}%")
         lines.append(f"Coverage Gaps Found: {len(report.gaps)}")

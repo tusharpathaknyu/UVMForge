@@ -1,5 +1,5 @@
 """
-I2C Protocol Configuration for VerifAI
+I2C Protocol Configuration for UVMForge
 """
 
 from dataclasses import dataclass, field

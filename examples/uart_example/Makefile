@@ -1,4 +1,4 @@
-# VerifAI Generated Makefile
+# UVMForge Generated Makefile
 # Protocol: UART
 # Module: uart_dut
 

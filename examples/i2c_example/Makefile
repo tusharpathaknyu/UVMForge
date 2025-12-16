@@ -1,4 +1,4 @@
-# VerifAI Generated Makefile
+# UVMForge Generated Makefile
 # Protocol: I2C
 # Module: i2c_master
 

@@ -1,5 +1,5 @@
-// Sample APB Slave for VerifAI RTL-Aware Demo
-// This file demonstrates what VerifAI can parse and generate testbenches for
+// Sample APB Slave for UVMForge RTL-Aware Demo
+// This file demonstrates what UVMForge can parse and generate testbenches for
 
 module apb_gpio #(
     parameter DATA_WIDTH = 32,

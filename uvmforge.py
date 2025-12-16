@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VerifAI - AI-Powered UVM Testbench Generator
+UVMForge - AI-Powered UVM Testbench Generator
 Main CLI Entry Point
 """
 
@@ -23,10 +23,10 @@ console = Console()
 
 
 def print_banner():
-    """Print the VerifAI banner"""
+    """Print the UVMForge banner"""
     banner = """
 ╔═══════════════════════════════════════════════════════════╗
-║                    🚀 VerifAI v1.0                        ║
+║                    🚀 UVMForge v1.0                       ║
 ║          AI-Powered UVM Testbench Generator               ║
 ╚═══════════════════════════════════════════════════════════╝
     """
@@ -67,15 +67,15 @@ def print_examples():
 @click.option('--interactive', '-i', is_flag=True, help='Interactive mode')
 def main(spec, spec_file, protocol, output, llm, interactive):
     """
-    VerifAI - Generate UVM testbenches from natural language.
+    UVMForge - Generate UVM testbenches from natural language.
     
     Examples:
     
-        verifai --spec "APB slave with 4 registers"
+        uvmforge --spec "APB slave with 4 registers"
         
-        verifai --spec-file my_spec.txt --output ./my_tb
+        uvmforge --spec-file my_spec.txt --output ./my_tb
         
-        verifai --interactive
+        uvmforge --interactive
     """
     print_banner()
     

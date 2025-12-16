@@ -300,7 +300,7 @@ class UVMGenerator:
         sv_files_section = newline.join(file_lines)
         last_file = sv_files[-1] if sv_files else ""
         
-        return f'''# VerifAI Generated Makefile
+        return f'''# UVMForge Generated Makefile
 # Protocol: {spec.protocol.upper()}
 # Module: {spec.module_name}
 
