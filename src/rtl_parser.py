@@ -482,6 +482,34 @@ def analyze_rtl(rtl_content: str, file_path: str = "") -> Dict:
     }
 
 
+@dataclass
+class DesignComplexity:
+    """Design complexity metrics"""
+    total_ports: int
+    input_count: int
+    output_count: int
+    data_width: int
+    addr_width: int
+    fsm_states: int
+    parameter_count: int
+    has_fsm: bool
+    detected_protocol: str
+    protocol_confidence: float
+    complexity_score: str  # "low", "medium", "high"
+    estimated_coverage_points: int
+
+
+@dataclass
+class VerificationChecklist:
+    """Auto-generated verification checklist"""
+    reset_tests: List[str]
+    protocol_tests: List[str]
+    fsm_tests: List[str]
+    data_path_tests: List[str]
+    edge_cases: List[str]
+    corner_cases: List[str]
+
+
 class SimpleParsedRTL:
     """Simple wrapper for app.py compatibility"""
     def __init__(self, parsed: ParsedRTL):
@@ -493,10 +521,176 @@ class SimpleParsedRTL:
         self.resets = parsed.clocks.reset_signals
         self.fsm = {
             'states': parsed.fsm.states if parsed.fsm else [],
-            'state_var': parsed.fsm.state_variable if parsed.fsm else None
+            'state_var': parsed.fsm.state_reg if parsed.fsm else None
         } if parsed.fsm else None
         self.ports = parsed.ports
         self.parameters = parsed.parameters
+        
+        # Add new computed properties
+        self.complexity = self._compute_complexity(parsed)
+        self.checklist = self._generate_checklist(parsed)
+    
+    def _compute_complexity(self, parsed: ParsedRTL) -> DesignComplexity:
+        """Compute design complexity metrics"""
+        fsm_states = len(parsed.fsm.states) if parsed.fsm else 0
+        protocol = parsed.protocol_hints[0].protocol if parsed.protocol_hints else "generic"
+        confidence = parsed.protocol_hints[0].confidence if parsed.protocol_hints else 0.0
+        
+        # Calculate complexity score
+        score_value = (
+            len(parsed.ports) * 2 +
+            fsm_states * 5 +
+            len(parsed.parameters) * 1 +
+            (10 if protocol != "generic" else 0)
+        )
+        
+        if score_value < 20:
+            complexity_score = "low"
+        elif score_value < 50:
+            complexity_score = "medium"
+        else:
+            complexity_score = "high"
+        
+        # Estimate coverage points
+        est_coverage = (
+            len(parsed.ports) * 4 +  # Per-port toggle coverage
+            fsm_states * fsm_states +  # State transitions
+            parsed.get_data_width() +  # Data values
+            10  # Base
+        )
+        
+        return DesignComplexity(
+            total_ports=len(parsed.ports),
+            input_count=len(parsed.input_ports),
+            output_count=len(parsed.output_ports),
+            data_width=parsed.get_data_width(),
+            addr_width=parsed.get_addr_width(),
+            fsm_states=fsm_states,
+            parameter_count=len(parsed.parameters),
+            has_fsm=parsed.fsm is not None,
+            detected_protocol=protocol,
+            protocol_confidence=confidence,
+            complexity_score=complexity_score,
+            estimated_coverage_points=est_coverage
+        )
+    
+    def _generate_checklist(self, parsed: ParsedRTL) -> VerificationChecklist:
+        """Generate verification checklist based on RTL analysis"""
+        reset_tests = []
+        protocol_tests = []
+        fsm_tests = []
+        data_path_tests = []
+        edge_cases = []
+        corner_cases = []
+        
+        # Reset tests
+        for reset in parsed.clocks.reset_signals:
+            polarity = parsed.clocks.reset_polarity.get(reset, "active_low")
+            reset_tests.append(f"Verify all outputs go to default on {reset} assertion")
+            reset_tests.append(f"Verify proper operation after {reset} de-assertion")
+            reset_tests.append(f"Test reset during active transaction")
+        
+        if not reset_tests:
+            reset_tests.append("Verify reset behavior (no reset signal detected)")
+        
+        # Protocol-specific tests
+        protocol = parsed.protocol_hints[0].protocol if parsed.protocol_hints else "generic"
+        if protocol == "apb":
+            protocol_tests = [
+                "Verify PREADY timing (must be valid in ACCESS phase)",
+                "Verify back-to-back transactions",
+                "Test PSLVERR error response",
+                "Verify wait states with PREADY low",
+                "Test PSEL deassert during transaction"
+            ]
+        elif protocol == "axi4lite":
+            protocol_tests = [
+                "Verify handshake completion (VALID-READY)",
+                "Test write response (BRESP)",
+                "Test read response (RRESP)",
+                "Verify no data corruption on back-to-back",
+                "Test outstanding transactions"
+            ]
+        elif protocol == "uart":
+            protocol_tests = [
+                "Verify baud rate accuracy",
+                "Test start/stop bit timing",
+                "Test parity (if enabled)",
+                "Test frame error detection",
+                "Test overrun error"
+            ]
+        elif protocol == "spi":
+            protocol_tests = [
+                "Verify clock polarity (CPOL)",
+                "Verify clock phase (CPHA)",
+                "Test chip select timing",
+                "Verify MSB/LSB first",
+                "Test multiple byte transfer"
+            ]
+        elif protocol == "i2c":
+            protocol_tests = [
+                "Verify START condition",
+                "Verify STOP condition",
+                "Test ACK/NACK response",
+                "Test clock stretching",
+                "Test repeated START"
+            ]
+        else:
+            protocol_tests = [
+                "Verify basic read operation",
+                "Verify basic write operation",
+                "Test control signals timing"
+            ]
+        
+        # FSM tests
+        if parsed.fsm and parsed.fsm.states:
+            states = parsed.fsm.states
+            fsm_tests.append(f"Verify all {len(states)} states are reachable")
+            fsm_tests.append("Test all valid state transitions")
+            fsm_tests.append("Test illegal state recovery")
+            for state in states[:3]:  # First 3 states
+                fsm_tests.append(f"Verify behavior in {state} state")
+        else:
+            fsm_tests.append("No FSM detected - verify sequential logic")
+        
+        # Data path tests
+        data_w = parsed.get_data_width()
+        addr_w = parsed.get_addr_width()
+        data_path_tests = [
+            f"Test all-zeros data (0x{'0'*((data_w+3)//4)})",
+            f"Test all-ones data (0x{'F'*((data_w+3)//4)})",
+            "Test alternating pattern (0xAA...)",
+            "Test walking ones pattern",
+            f"Test full address range (0 to 2^{addr_w}-1)"
+        ]
+        
+        # Edge cases
+        edge_cases = [
+            "Transaction at reset edge",
+            "Back-to-back transactions",
+            "Maximum frequency operation",
+            "Minimum timing margins"
+        ]
+        
+        # Corner cases based on design
+        if parsed.fsm:
+            corner_cases.append("State transition during reset")
+            corner_cases.append("Invalid state encoding")
+        
+        corner_cases.extend([
+            "Bus contention scenarios",
+            "Clock boundary crossing",
+            "Power-on sequence"
+        ])
+        
+        return VerificationChecklist(
+            reset_tests=reset_tests,
+            protocol_tests=protocol_tests,
+            fsm_tests=fsm_tests,
+            data_path_tests=data_path_tests,
+            edge_cases=edge_cases,
+            corner_cases=corner_cases
+        )
 
 
 def parse_rtl(rtl_content: str, file_path: str = "") -> SimpleParsedRTL:

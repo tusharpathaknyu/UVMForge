@@ -586,17 +586,29 @@ with tabs[0]:
         if st.session_state.get('gen_success') and st.session_state.get('parsed'):
             parsed = st.session_state['parsed']
             
-            # Analysis summary
-            st.success(f"Successfully analyzed **{parsed.module_name}**")
+            # Analysis summary with protocol detection
+            protocol_info = ""
+            if hasattr(parsed, 'complexity') and parsed.complexity:
+                protocol = parsed.complexity.detected_protocol
+                confidence = parsed.complexity.protocol_confidence
+                if protocol != "generic":
+                    protocol_info = f" - Detected **{protocol.upper()}** ({int(confidence*100)}% confidence)"
             
-            # Metrics row
+            st.success(f"Analyzed **{parsed.module_name}**{protocol_info}")
+            
+            # Metrics row - enhanced
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Inputs", len(parsed.inputs))
             c2.metric("Outputs", len(parsed.outputs))
-            c3.metric("Clocks", len(parsed.clocks) if parsed.clocks else 0)
-            c4.metric("FSM", "Yes" if parsed.fsm else "No")
             
-            # Show detected info
+            if hasattr(parsed, 'complexity') and parsed.complexity:
+                c3.metric("Complexity", parsed.complexity.complexity_score.title())
+                c4.metric("Est. Coverage Pts", parsed.complexity.estimated_coverage_points)
+            else:
+                c3.metric("Clocks", len(parsed.clocks) if parsed.clocks else 0)
+                c4.metric("FSM", "Yes" if parsed.fsm else "No")
+            
+            # Show detected info - enhanced
             with st.expander("View Analysis Details"):
                 if parsed.clocks:
                     st.write(f"**Clock signals:** `{', '.join(parsed.clocks)}`")
@@ -608,6 +620,36 @@ with tabs[0]:
                         st.write(f"**FSM States:** {', '.join(states)}")
                 st.write(f"**Input signals:** `{', '.join(parsed.inputs[:5])}{'...' if len(parsed.inputs) > 5 else ''}`")
                 st.write(f"**Output signals:** `{', '.join(parsed.outputs[:5])}{'...' if len(parsed.outputs) > 5 else ''}`")
+                
+                # Show complexity details
+                if hasattr(parsed, 'complexity') and parsed.complexity:
+                    cx = parsed.complexity
+                    st.write(f"**Data Width:** {cx.data_width} bits")
+                    st.write(f"**Address Width:** {cx.addr_width} bits")
+                    if cx.fsm_states > 0:
+                        st.write(f"**FSM States:** {cx.fsm_states}")
+            
+            # Verification Checklist
+            if hasattr(parsed, 'checklist') and parsed.checklist:
+                with st.expander("Verification Checklist"):
+                    cl = parsed.checklist
+                    
+                    st.markdown("**Reset Tests:**")
+                    for test in cl.reset_tests[:3]:
+                        st.markdown(f"- {test}")
+                    
+                    st.markdown("**Protocol Tests:**")
+                    for test in cl.protocol_tests[:4]:
+                        st.markdown(f"- {test}")
+                    
+                    if cl.fsm_tests and cl.fsm_tests[0] != "No FSM detected - verify sequential logic":
+                        st.markdown("**FSM Tests:**")
+                        for test in cl.fsm_tests[:3]:
+                            st.markdown(f"- {test}")
+                    
+                    st.markdown("**Edge Cases:**")
+                    for test in cl.edge_cases[:3]:
+                        st.markdown(f"- {test}")
             
             # Generated code
             if st.session_state.get('tb_result'):

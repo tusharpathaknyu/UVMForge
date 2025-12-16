@@ -457,5 +457,130 @@ CONTROL,0x04,EN,0,RW,0,Enable
         assert "psel" in driver.lower() or "APB" in driver
 
 
+class TestDesignComplexity:
+    """Test the new design complexity metrics"""
+    
+    @pytest.fixture
+    def sample_apb_rtl(self):
+        return '''
+        module apb_slave #(
+            parameter DATA_WIDTH = 32,
+            parameter ADDR_WIDTH = 8
+        ) (
+            input  logic                    pclk,
+            input  logic                    preset_n,
+            input  logic                    psel,
+            input  logic                    penable,
+            input  logic                    pwrite,
+            input  logic [7:0]              paddr,
+            input  logic [31:0]             pwdata,
+            output logic [31:0]             prdata,
+            output logic                    pready,
+            output logic                    pslverr
+        );
+            typedef enum logic [1:0] {
+                IDLE   = 2'b00,
+                SETUP  = 2'b01,
+                ACCESS = 2'b10
+            } state_t;
+            state_t state, next_state;
+        endmodule
+        '''
+    
+    def test_complexity_metrics_exist(self, sample_apb_rtl):
+        """Test that complexity metrics are computed"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        assert hasattr(result, 'complexity')
+        assert result.complexity is not None
+    
+    def test_complexity_score(self, sample_apb_rtl):
+        """Test complexity score calculation"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        assert result.complexity.complexity_score in ["low", "medium", "high"]
+    
+    def test_protocol_detection_confidence(self, sample_apb_rtl):
+        """Test protocol detection with confidence"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        assert result.complexity.detected_protocol == "apb"
+        assert result.complexity.protocol_confidence > 0.5
+    
+    def test_estimated_coverage_points(self, sample_apb_rtl):
+        """Test estimated coverage points calculation"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        assert result.complexity.estimated_coverage_points > 0
+
+
+class TestVerificationChecklist:
+    """Test the auto-generated verification checklist"""
+    
+    @pytest.fixture
+    def sample_apb_rtl(self):
+        return '''
+        module apb_slave (
+            input  logic        pclk,
+            input  logic        preset_n,
+            input  logic        psel,
+            input  logic        penable,
+            input  logic        pwrite,
+            input  logic [31:0] paddr,
+            input  logic [31:0] pwdata,
+            output logic [31:0] prdata,
+            output logic        pready,
+            output logic        pslverr
+        );
+        endmodule
+        '''
+    
+    def test_checklist_exists(self, sample_apb_rtl):
+        """Test that checklist is generated"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        assert hasattr(result, 'checklist')
+        assert result.checklist is not None
+    
+    def test_reset_tests_generated(self, sample_apb_rtl):
+        """Test reset tests are generated"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        assert len(result.checklist.reset_tests) > 0
+        assert any("reset" in t.lower() or "preset" in t.lower() for t in result.checklist.reset_tests)
+    
+    def test_protocol_tests_for_apb(self, sample_apb_rtl):
+        """Test APB-specific protocol tests are generated"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        assert len(result.checklist.protocol_tests) > 0
+        # APB should have PREADY test
+        assert any("PREADY" in t or "ready" in t.lower() for t in result.checklist.protocol_tests)
+    
+    def test_edge_cases_generated(self, sample_apb_rtl):
+        """Test edge cases are generated"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        assert len(result.checklist.edge_cases) > 0
+    
+    def test_data_path_tests(self, sample_apb_rtl):
+        """Test data path tests are generated"""
+        from src.rtl_parser import parse_rtl
+        result = parse_rtl(sample_apb_rtl)
+        
+        assert len(result.checklist.data_path_tests) > 0
+        # Should have all-zeros and all-ones tests
+        assert any("zero" in t.lower() for t in result.checklist.data_path_tests)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
