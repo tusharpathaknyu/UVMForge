@@ -5,6 +5,11 @@
 .env.local
 .env.*.local
 
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+
 # Python
 __pycache__/
 *.py[cod]
